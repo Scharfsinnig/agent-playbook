@@ -170,7 +170,7 @@ WorkState 是本手册定义的可恢复工作单元状态，不声称是跨框�
 
 Artifact 至少包含 `artifact_id`、`artifact_type`、`content_digest`、`storage_ref`、`schema_version`、`producer`、`work_unit_id`、`team_contract_version`、`input_refs`、`provenance`、`created_at`、`scope`、`verification_status` 和 `supersedes`。内容变化必须产生新 ID 或版本，不能原地覆盖已经被下游消费的制品。
 
-Message 可包含 `message_id`、sender、recipient、conversation/subject、payload ref、发送时间和 TTL，但它默认只是通知。只有授权入口把它转换成 Event 后才可驱动状态。Event 至少包含 `event_id`、`event_type`、`aggregate_id`、`causal_parent_ids`、`idempotency_key`、`actor`、`contract_version`、`fencing_token`、payload/artifact refs、发生时间、接收时间和事件序号。取消、完成、租约与合并必须以 Event 表示，不能只存在于聊天文本。
+Message 可包含 `message_id`、sender、recipient、conversation/subject、payload ref、发送时间和 TTL，但它默认只是通知。只有授权入口把它转换成 Event 后才可驱动状态。Event 至少包含 `event_id`、`event_type`、`aggregate_id`、`causal_parent_ids`、`idempotency_key`、`actor`、`contract_version`、`cancellation_generation`、`fencing_token`、payload/artifact refs、发生时间、接收时间和事件序号。取消、完成、租约与合并必须以 Event 表示，不能只存在于聊天文本。
 
 ## C.21 租约 Lease
 

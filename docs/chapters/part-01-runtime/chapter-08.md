@@ -37,7 +37,7 @@ Team Contract 还应说明谁能创建和取消 `WorkUnit`，谁能续租，谁�
 
 `TeamState` 或 `SwarmState` 保存团队当前契约、WorkGraph 版本、WorkUnit 索引、共享制品引用、未决冲突、预算、取消代次、完成谓词评估和控制器租约。它是团队执行真相的投影，不是所有聊天记录的拼接。
 
-`WorkState` 是本手册为可恢复工作单元定义的状态对象，不声称是跨框架标准。推荐主生命周期为 `queued → leased → running → submitted → verifying → merged → done`，并保留 `blocked`、`retryable_failed`、`needs_replan`、`escalated`、`cancelled` 和 `expired` 等侧状态。worker 只发出携带 lease ID、fencing token、契约版本和幂等键的状态事件；授权 reducer 校验当前前态、token、契约/取消代次和所需证据后，才把事件应用为 WorkState 转换。重复、过期或迟到 worker 因而不能自行推进共享真相。
+`WorkState` 是本手册为可恢复工作单元定义的状态对象，不声称是跨框架标准。推荐主生命周期为 `queued → leased → running → submitted → verifying → merged → done`，并保留 `blocked`、`retryable_failed`、`needs_replan`、`escalated`、`cancelled` 和 `expired` 等侧状态。worker 只发出携带 lease ID、fencing token、契约版本、`cancellation_generation` 和幂等键的状态事件；授权 reducer 校验当前前态、token、契约/取消代次和所需证据后，才把事件应用为 WorkState 转换。重复、过期或迟到 worker 因而不能自行推进共享真相。
 
 ### 8.2.4 Artifact 与 Message/Event
 

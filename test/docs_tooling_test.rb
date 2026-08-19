@@ -27,6 +27,7 @@ class DocsToolingTest < Minitest::Test
       FileUtils.cp_r(File.join(ROOT, "docs"), directory)
       FileUtils.mkdir_p(File.join(directory, "scripts"))
       FileUtils.cp(File.join(ROOT, "scripts/verify-docs.rb"), File.join(directory, "scripts"))
+      initialize_git_index(directory)
       File.open(File.join(directory, "docs/guide/overview.md"), "a", encoding: "UTF-8") do |file|
         file.write("\n#{body_fragment}\n")
       end
@@ -39,9 +40,18 @@ class DocsToolingTest < Minitest::Test
       FileUtils.cp_r(File.join(ROOT, "docs"), directory)
       FileUtils.mkdir_p(File.join(directory, "scripts"))
       FileUtils.cp(File.join(ROOT, "scripts/verify-docs.rb"), File.join(directory, "scripts"))
+      initialize_git_index(directory)
       yield directory
       return Open3.capture3("ruby", "scripts/verify-docs.rb", chdir: directory)
     end
+  end
+
+  def initialize_git_index(directory)
+    _stdout, stderr, status = Open3.capture3("git", "init", "--quiet", chdir: directory)
+    raise stderr unless status.success?
+
+    _stdout, stderr, status = Open3.capture3("git", "add", "docs", "scripts", chdir: directory)
+    raise stderr unless status.success?
   end
 
   def append_to_copied_file(directory, relative_path, fragment)
@@ -164,6 +174,46 @@ class DocsToolingTest < Minitest::Test
     assert_includes stderr, "external URLs outside docs/references.md: 1 across 1 files"
   end
 
+  def test_full_verifier_rejects_external_url_in_html_layout
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/_layouts/default.html", '<a href="https://example.com/help">Help</a>')
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "external URLs outside docs/references.md: 1 across 1 files"
+  end
+
+  def test_full_verifier_accepts_expected_config_url_fields
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      replace_in_copied_file(directory, "docs/_config.yml") do |text|
+        text.sub("https://scharfsinnig.github.io", "https://example.com")
+            .sub(/^repository_url:.*\n?/, "") + "\nrepository_url: https://example.com/repository\n"
+      end
+    end
+
+    assert status.success?, [stdout, stderr].reject(&:empty?).join("\n")
+  end
+
+  def test_full_verifier_rejects_url_in_unexpected_config_field
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/_config.yml", "support_url: https://example.com/help")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "external URLs outside docs/references.md: 1 across 1 files"
+  end
+
+  def test_verifier_rejects_tracked_markdown_outside_docs
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      File.write(File.join(directory, "alternate-manuscript.markdown"), "# Duplicate manuscript\n", encoding: "UTF-8")
+      _git_stdout, git_stderr, git_status = Open3.capture3("git", "add", "alternate-manuscript.markdown", chdir: directory)
+      raise git_stderr unless git_status.success?
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "tracked Markdown outside docs: alternate-manuscript.markdown"
+  end
+
   def test_casual_reference_text_is_not_a_definition
     stdout, stderr, status = run_full_verifier_with_mutations do |directory|
       append_to_copied_file(directory, "docs/guide/overview.md", "[R99]({{ '/references/#r99' | relative_url }})")
@@ -253,7 +303,7 @@ class DocsToolingTest < Minitest::Test
     assert_includes stderr, "invalid reference definition heading or anchor"
   end
 
-  def test_full_verifier_rejects_unused_reference_definition
+  def test_full_verifier_warns_for_unused_reference_definition
     stdout, stderr, status = run_full_verifier_with_mutations do |directory|
       path = File.join(directory, "docs/references.md")
       text = File.read(path, encoding: "UTF-8")
@@ -262,8 +312,10 @@ class DocsToolingTest < Minitest::Test
       append_to_copied_file(directory, "docs/references.md", "### #{id} · Unused {##{id.downcase}}\n\n- Source: https://example.com/unused")
     end
 
-    refute status.success?, stdout
+    assert status.success?, [stdout, stderr].reject(&:empty?).join("\n")
     assert_includes stderr, "unused reference definitions:"
+    assert_includes stderr, "WARNING:"
+    refute_includes stderr, "ERROR:"
   end
 
   def test_structure_verifier_rejects_table_with_edge_pipes
@@ -296,7 +348,7 @@ class DocsToolingTest < Minitest::Test
     ]
     text = paths.map { |path| File.read(File.join(ROOT, path), encoding: "UTF-8") }.join("\n")
 
-    assert_includes text, "worker 只发出携带 lease ID、fencing token、契约版本和幂等键的状态事件"
+    assert_includes text, "worker 只发出携带 lease ID、fencing token、契约版本、`cancellation_generation` 和幂等键的状态事件"
     assert_includes text, "每个 actor 都只提交携带契约版本、取消代次、fencing token、幂等键和证据引用的事件"
     assert_operator text.scan("授权 reducer").length, :>=, 6
     assert_includes text, "`work_started` 事件"

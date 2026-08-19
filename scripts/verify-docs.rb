@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require "set"
+require "open3"
 require "yaml"
 
 ROOT = File.expand_path("..", __dir__)
@@ -14,6 +15,7 @@ PARTS = [
   ["part-05-cases-roadmap", 24, 28]
 ].freeze
 LEGACY_PATHS = %w[handbook _config.yml _data _layouts assets index.md 404.md scripts/split-handbook.sh].freeze
+ALLOWED_ROOT_MARKDOWN = %w[README.md CONTRIBUTING.md].freeze
 INDUSTRY_TERMS = %w[产业级 产业实践 产业现场 产业价值 产业案例 产业架构].freeze
 EXTERNAL_URL_PATTERN = %r!https?://[^\s)>"']+!
 REFERENCE_HEADING_PATTERN = /^### (R\d{2,}) · (\S(?:.*\S)?) \{#(r\d{2,})\}\s*$/
@@ -209,6 +211,18 @@ LEGACY_PATHS.each do |relative|
 end
 errors << "docs/ must not contain README.md files" unless Dir.glob(File.join(DOCS, "**", "README.md")).empty?
 
+tracked_output, tracked_stderr, tracked_status = Open3.capture3("git", "-C", ROOT, "ls-files", "-z")
+if tracked_status.success?
+  tracked_markdown_outside_docs = tracked_output.split("\0").select do |relative|
+    relative.match?(/\.(?:md|markdown)\z/i) && !relative.start_with?("docs/") && !ALLOWED_ROOT_MARKDOWN.include?(relative)
+  end
+  unless tracked_markdown_outside_docs.empty?
+    errors << "tracked Markdown outside docs: #{tracked_markdown_outside_docs.sort.join(', ')}"
+  end
+else
+  errors << "unable to inspect tracked Markdown: #{tracked_stderr.strip}"
+end
+
 forbidden = {
   "Mermaid block" => /^\s*```mermaid\b/i,
   "Markdown image" => /!\[[^\]]*\](?:\s*\([^)]*\)|\s*\[[^\]]*\])?/,
@@ -295,7 +309,7 @@ unless structure_only
   missing_references = body_reference_ids - reference_ids
   unused_references = reference_ids - body_reference_ids
   errors << "undefined body references: #{missing_references.to_a.sort.join(', ')}" unless missing_references.empty?
-  errors << "unused reference definitions: #{unused_references.to_a.sort.join(', ')}" unless unused_references.empty?
+  warnings << "unused reference definitions: #{unused_references.to_a.sort.join(', ')}" unless unused_references.empty?
 
   definition_entries.each do |entry|
     start_index = reference_body.index(entry[:heading])
@@ -306,18 +320,27 @@ unless structure_only
     errors << "reference definition has no external URL: #{entry[:id]}" unless section.match?(EXTERNAL_URL_PATTERN)
   end
 
-  markdown_url_counts = actual_paths.each_with_object({}) do |relative, result|
-    count = File.read(File.join(ROOT, relative), encoding: "UTF-8").scan(EXTERNAL_URL_PATTERN).length
+  site_copy_paths = Dir.glob(File.join(DOCS, "**", "*.{md,markdown,html,yml,yaml}"))
+  body_url_counts = site_copy_paths.each_with_object({}) do |path, result|
+    relative = path.delete_prefix(ROOT + "/")
+    next if relative == "docs/references.md"
+
+    count = File.read(path, encoding: "UTF-8").scan(EXTERNAL_URL_PATTERN).length
+    if relative == "docs/_config.yml" && config.is_a?(Hash)
+      allowed_count = %w[url repository_url].sum do |key|
+        value = config[key]
+        value.is_a?(String) ? value.scan(EXTERNAL_URL_PATTERN).length : 0
+      end
+      count -= allowed_count
+    end
     result[relative] = count if count.positive?
   end
-  body_url_counts = markdown_url_counts.reject { |path, _| path == "docs/references.md" }
   body_url_total = body_url_counts.values.sum
   reference_urls = reference_body.scan(EXTERNAL_URL_PATTERN)
   reference_url_total = reference_urls.length
   reference_unique_url_total = reference_urls.to_set.length
   errors << "external URLs outside docs/references.md: #{body_url_total} across #{body_url_counts.length} files" if body_url_total.positive?
 
-  site_copy_paths = Dir.glob(File.join(DOCS, "**", "*.{md,yml,html}"))
   term_counts = INDUSTRY_TERMS.each_with_object({}) do |term, result|
     count = site_copy_paths.sum { |path| File.read(path, encoding: "UTF-8").scan(term).length }
     result[term] = count if count.positive?

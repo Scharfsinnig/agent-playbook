@@ -1,10 +1,11 @@
-title: AI Agent Playbook
+title: AI Agent 技术框架、任务执行与持续进化实践手册
 description: 从任务执行到框架、记忆、学习、多智能体协作、评测、安全与持续进化的系统手册
 lang: zh-CN
 timezone: Asia/Shanghai
 url: https://scharfsinnig.github.io
 baseurl: /agent-playbook
 repository: Scharfsinnig/agent-playbook
+repository_url: https://github.com/Scharfsinnig/agent-playbook
 
 markdown: kramdown
 kramdown:
