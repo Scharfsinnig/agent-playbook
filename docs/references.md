@@ -257,3 +257,29 @@ NIST：[AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-managemen
 ### R59 · 中国生成式 AI 与内容标识规则 {#r59}
 
 中国国家互联网信息办公室等：[《生成式人工智能服务管理暂行办法》](https://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm) 与[《人工智能生成合成内容标识办法》](https://www.cac.gov.cn/2025-03/14/c_1743654684782215.htm)。用于按是否面向境内公众、服务类型、传播角色与数据活动核对要求；不应泛化为全部内部 Agent 的统一规则。
+
+## 本体、知识表示与语义治理
+
+### R60 · RDF 1.1 Concepts and Abstract Syntax {#r60}
+
+W3C：[RDF 1.1 Concepts and Abstract Syntax](https://www.w3.org/TR/rdf11-concepts/)。用于核对 RDF 图、三元组、IRI、空白节点与数据集的基础语义；RDF 是一种数据表示，不自动提供领域词义、事实真实性、权限或发布治理。
+
+### R61 · OWL 2 Web Ontology Language {#r61}
+
+W3C：[OWL 2 Primer](https://www.w3.org/TR/owl2-primer/) 与 [OWL 2 Structural Specification and Functional-Style Syntax](https://www.w3.org/TR/owl2-syntax/)。用于理解类、属性、个体、公理、开放世界语义以及 ontology/version IRI 和兼容性标记；OWL 的推理语义不等于数据必填校验、业务正确性或动作授权。
+
+### R62 · Shapes Constraint Language {#r62}
+
+W3C：[Shapes Constraint Language (SHACL)](https://www.w3.org/TR/shacl/)。用于对 data graph 和 shapes graph 执行显式约束校验并保留 validation report；`conforms` 只说明给定图满足给定 shapes，不证明来源真实、本体整体一致或候选变更已经获准发布。
+
+### R63 · PROV-O {#r63}
+
+W3C：[PROV-O: The PROV Ontology](https://www.w3.org/TR/prov-o/)。用于用 Entity、Activity、Agent、generation、use 和 revision 关系记录语义快照、变更活动、责任与血缘；溯源关系不能自动授予权限，也不能单独证明内容正确。
+
+### R64 · SKOS Reference {#r64}
+
+W3C：[SKOS Simple Knowledge Organization System Reference](https://www.w3.org/TR/skos-reference/)。用于表达概念标签、层级、关联和跨方案映射，并区分 `closeMatch` 与 `exactMatch` 等匹配强度；概念相近不等于实体同一，SKOS 映射也不能替代本体发布与冲突治理。
+
+### R65 · FIPA ACL Message Structure {#r65}
+
+FIPA：[ACL Message Structure Specification](https://www.fipa.org/specs/fipa00061/SC00061G.html)。用于了解 Agent 消息显式携带 performative、sender/receiver、content、language、ontology、protocol 与 conversation ID 的历史互操作设计；该报文结构不构成现代 LLM 多智能体系统的安全、授权、隔离、验证或恢复保证。

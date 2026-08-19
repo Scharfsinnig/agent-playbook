@@ -196,3 +196,22 @@ Conflict Case 至少包含 `conflict_case_id`、涉及的 proposal/artifact/clai
 - 人机指标报告接管率、handoff packet 理解时间、人工返工量、人工修改后的接受率和合并后回滚率。
 
 这些指标需要同时记录分母、观察窗口、样本量和版本。多个成员结论一致而来源相同，不应提高独立证据比例；任务因 worker 自报完成但未通过团队 completion predicate，不应计入经验证成功。
+
+## C.24 本体状态与语义映射 OntologyState / Semantic Mapping
+
+`OntologyState` 是已发布语义契约在某一版本的不可变快照，不是知识库内容、聊天记忆或某个 worker 可原地修改的共享 JSON。它至少包含以下字段。
+
+- `ontology_id`、`namespace`、`domain_scope`、`owner`、`version`、`snapshot_id`、`effective_at`、`valid_until`、`supersedes`、`compatibility` 与 `migration_plan_ref`，用于确定快照身份、责任、适用域、生效窗口和迁移路径。
+- `concepts`、`entity_types`、`relations`、`event_types` 与 `semantic_actions`，用于登记稳定 ID、规范名称、定义、允许属性、关系方向、域和值域、时间和辖区语义。
+- `identity_rules`、`alias_rules`、`equivalence_rules` 与 `entity_resolution_policy`，用于区分名称相似、局部别名、近似映射和经批准的实体等同。候选相似度不能自行改写身份。
+- `assertion_statuses`、`completeness_scopes` 与 `open_closed_policies`，用于区分已验证、候选、冲突、撤销和未知，并明确哪些有限数据集可以按闭合规则检查；缺少开放世界断言时不得默认推为否。
+- `provenance_policy`、`confidence_policy`、`validation_status`、`acl_scope` 与 `purpose_scope`，用于保留定义、映射和断言的来源、责任、适用权限与用途。PROV-O 的 Entity、Activity、Agent 及 revision 关系可用于表达快照、变更活动和责任血缘，但溯源自洽不等于内容真实或发布获批。[R63]({{ '/references/#r63' | relative_url }})
+- `mapping_proposal_ids`、`conflict_case_ids`、`local_extensions` 与 `deprecated_terms`，用于关联待决映射、未解决冲突、局部词汇的范围/TTL 和迁移中的弃用项。
+
+本体主生命周期为 `proposed → reviewed → validated → active → superseded/deprecated/retired`。进入 `active` 后的 snapshot 内容不可变；修正必须产生新版本，并保留旧快照、差异、批准记录和回滚关系。`validated` 只表示通过预定的 schema、逻辑、形状、兼容性和回放检查，不自动表示业务事实正确。发布者必须是 Team Contract 或组织控制面指定的 authority；LLM、worker、检索器和实体解析器只能提交带证据的变更提案。
+
+每个 `SemanticAction` 建议包含 `semantic_action_id`、输入/输出类型、`preconditions`、`postconditions`、`read_set`、`write_set`、影响范围、`reversibility`、`risk_level`、`required_capabilities`、`tool_mapping_version`、幂等/补偿要求和 `verifier_ref`。工具名称变化可以保持语义动作 ID 不变；若前置条件、副作用或验证标准变化，则必须评估为新语义版本，不能只修改描述文本后继续执行旧计划。
+
+`Semantic Mapping Proposal` 至少包含源/目标概念或实体 ID、源/目标快照、映射类型、适用范围、证据与反例、置信度、提出者、影响分析、建议迁移和状态。它经过 `proposed → validated → accepted/rejected/needs_human`，只有被有权 owner 接受后才进入新快照。实体合并、概念拆分、关系方向改变、动作语义改变或 capability 扩大必须要求人工批准；旧 artifact 继续引用原快照，不得批量覆写历史含义。
+
+Task Contract、RunState、WorkUnit、Artifact、Message/Event、Merge Proposal 和 Release Manifest 都应引用各自使用的 `ontology_snapshot_id`。Release Manifest 还应绑定实体解析器版本、别名/映射集、语义动作—工具映射、迁移器、验证器和回放报告。运行恢复或跨版本合并时，系统先判断快照兼容性；无法证明兼容，就把受影响对象转为 `stale_version` 或 Conflict Case，停止相关提交并重新解析，而不是让新版本静默解释旧制品。

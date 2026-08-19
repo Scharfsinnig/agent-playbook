@@ -21,19 +21,28 @@ next_page: /chapters/part-01-runtime/chapter-05/
 
 派发之前持久化意图很重要：运行时先写 `ActionAuthorized` 与幂等键，再写或发送 `ToolDispatched`。工具返回后追加 `ReceiptObserved`，包括协议状态、结构化结果引用、工具版本、实际资源版本和错误类别。reducer 依据回执更新执行状态；验证器再判定条款是否真正支持所需 claim。若工具超时，状态不是简单 `failed`，而是 `unknown`：系统应使用 correlation ID 查询任务状态、等待签名回调或把它交给人工，而不是立刻重发一个可能已经执行的写请求。
 
-## 4.3 进展与循环检测必须基于外部变化
+## 4.3 观察必须先语义落地，才能进入状态
+
+工具返回 `200 OK`，只能说明一次协议交互成功；模型把结果总结得很流畅，也不能证明它识别了正确对象。运行时需要在原始观察和状态变化之间增加语义落地：`原始观察 → 权限与用途过滤 → 结构解析 → 实体解析 → 概念/关系/事件映射 → 约束检查 → 状态差异提案`。RDF 的三元组表示可以承载映射结果，但工程上也可以用带稳定 ID 的 JSON、关系表或事件对象；关键是主体、关系、客体、时间和来源不再只靠自然语言位置来猜。[R60]({{ '/references/#r60' | relative_url }})
+
+语义落地至少应产生五种可观察结果：`grounded` 表示术语和实体在当前本体快照中唯一匹配；`ambiguous` 表示仍有多个合理候选；`unmapped` 表示当前版本没有该词义；`constraint_violation` 表示对象类型、关系方向、时间或辖区不满足约束；`stale_version` 表示观察使用了过期语义或工具映射。只有 `grounded` 且通过必要验证的观察才能直接参与 reducer；其余结果应触发澄清、补充查询、映射提案、阻断或重规划，而不是由模型静默挑一个解释。SHACL 一类形状校验可以检查候选数据是否符合显式约束，但校验通过不等于来源真实、授权有效或任务完成。[R62]({{ '/references/#r62' | relative_url }})
+
+动作也需要语义身份，而不只是工具函数名。`approve_supplier` 在两个系统中可能分别表示“记录审阅意见”和“改变供应商准入状态”。因此 `SemanticAction` 应固定前置条件、后置条件、读取集、写入集、影响范围、可逆性、风险级别、所需 capability、工具映射版本和 verifier。模型可以建议“Acme 指上海子公司”或“该工具对应草稿动作”，但实体解析器、版本化注册表、确定性规则和有权控制面必须在执行前验证。若 `Acme` 同时匹配品牌、集团和两个法人，正确状态是 `ambiguous`，不是用最高相似度对其中一个法人执行写操作。
+
+## 4.4 进展与循环检测必须基于外部变化
 
 模型说“再检索一次也许会更好”不是进展。进展应来自可观测的目标差距缩小，例如未完成验收项减少、获得新的独立证据、世界对象进入期望状态、关键计划前提被确认、风险被降低。对于调研任务，可以计算尚缺的证据类别、每项结论的引用覆盖和冲突数量；对于代码任务，可以观察测试、文件 diff 和构建结果；对于业务办理，则观察权威系统的状态转移。
 
 循环守护器还要识别动作指纹和状态振荡。一个实用指纹是 `tool + 规范化参数 + 目标子集 + 世界版本`。同一指纹在世界版本不变时反复出现，或出现 A→B→A 的模式且没有新证据，表明当前策略已卡住。此时正确反应未必是立即失败：可以重规划、切换到更低风险的替代工具、要求澄清、等待外部事件或把最小证据包交给人。硬性的 Token、时间、工具调用和递归深度上限仍必须存在，但它们是防火墙，不是任务完成逻辑。
 
-## 4.4 一个可恢复控制循环的伪代码
+## 4.5 一个可恢复控制循环的伪代码
 
 ```text
 state = load_or_create_run(contract, identity)
+ontology = load_immutable_ontology_snapshot(contract.ontology_snapshot_id)
 while state.phase is not terminal:
     enforce_deadline_and_cancellation(state)
-    context = compile_context(state, acl, purpose, freshness)
+    context = compile_context(state, ontology, acl, purpose, freshness)
     candidates = planner.propose(context) + [ASK_HUMAN, WAIT, REPLAN, STOP]
     candidates = policy_filter(candidates, state)
     action = choose_allowed_candidate(candidates, progress, cost, risk)
@@ -44,8 +53,14 @@ while state.phase is not terminal:
         persist_intent_and_idempotency_key(action)
         require_commit_time_authorization(action)
 
-    observation = dispatch_or_wait(action)
+    raw_observation = dispatch_or_wait(action)
+    observation = semantic_ground(raw_observation, ontology, entity_registry)
     append_event(observation)
+    if observation.status is not grounded:
+        recovery_event = choose_clarify_block_or_replan(observation)
+        append_event(recovery_event)
+        state = reduce(state, recovery_event)
+        continue
     state = reduce(state, observation)
     verdict = verifier.evaluate(contract, state)
 
@@ -56,8 +71,8 @@ while state.phase is not terminal:
 
 这里的 `choose_allowed_candidate` 可以使用规则、模型评分或学习到的路由器，但永远在 `policy_filter` 之后。`verifier.evaluate` 也不应只调用与执行模型相同的提示去询问“对不对”；应优先使用规则、测试、权威读取和独立证据。模型自评可以成为低成本的线索，例如建议“此处可能缺合同附件”，但它不应单独触发成功、写入长期记忆或扩大权限。
 
-## 4.5 运行质量如何评估
+## 4.6 运行质量如何评估
 
-除最终成功率外，运行时应测量无进展循环率、重复动作率、从取消到静止的时延、恢复后重复副作用数、未知结果对账时延、状态迁移非法率和在预算耗尽前得到可行动终态的比例。对每个失败 run，还要记录 first divergence：第一个偏离契约、错误事实、权限拒绝或工具协议不满足的事件。仅看最后一个报错会把根因错归为“模型不够聪明”。
+除最终成功率外，运行时应测量无进展循环率、重复动作率、语义落地失败率、实体歧义阻断率、过期本体或工具映射命中率、从取消到静止的时延、恢复后重复副作用数、未知结果对账时延、状态迁移非法率和在预算耗尽前得到可行动终态的比例。对每个失败 run，还要记录 first divergence：第一个偏离契约、错误实体、错误关系、权限拒绝或工具协议不满足的事件。仅看最后一个报错会把根因错归为“模型不够聪明”。
 
 这种状态机的边界是，它不会自动判断复杂业务的价值，也无法从不完美观测中推出真相。它的作用是把不确定判断放在有回路、有证据、有恢复边界的地方。第五章讨论模型在该回路内怎样规划，而不把计划本身误当成执行事实。
