@@ -91,6 +91,53 @@ class DocsToolingTest < Minitest::Test
     end
   end
 
+  def test_public_homepage_is_static_and_covers_every_navigation_entry
+    homepage = File.read(File.join(ROOT, "docs/index.md"), encoding: "UTF-8")
+    config = YAML.safe_load(File.read(File.join(ROOT, "docs/_config.yml"), encoding: "UTF-8"), aliases: false)
+    navigation = YAML.safe_load(File.read(File.join(ROOT, "docs/_data/navigation.yml"), encoding: "UTF-8"), aliases: false)
+    site_root = "#{config.fetch('url')}#{config.fetch('baseurl')}"
+    entries = [navigation.fetch("overview")]
+    navigation.fetch("parts").each do |part|
+      entries << part.slice("title", "url")
+      entries.concat(part.fetch("chapters"))
+    end
+    entries << navigation.fetch("conclusion")
+    entries << navigation.fetch("appendices").slice("title", "url")
+    entries.concat(navigation.fetch("appendices").fetch("items"))
+    entries << navigation.fetch("references")
+
+    refute_includes homepage, "{{"
+    refute_includes homepage, "{%"
+    entries.each do |entry|
+      assert_includes homepage, "[#{entry.fetch('title')}](#{site_root}#{entry.fetch('url')})"
+    end
+  end
+
+  def test_full_verifier_accepts_declared_site_urls_in_homepage
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      config = YAML.safe_load(File.read(File.join(directory, "docs/_config.yml"), encoding: "UTF-8"), aliases: false)
+      site_root = "#{config.fetch('url')}#{config.fetch('baseurl')}"
+      append_to_copied_file(
+        directory,
+        "docs/index.md",
+        "[online guide](#{site_root}/guide/overview/)"
+      )
+    end
+
+    assert status.success?, [stdout, stderr].reject(&:empty?).join("\n")
+  end
+
+  def test_full_verifier_rejects_declared_site_url_with_missing_route
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      config = YAML.safe_load(File.read(File.join(directory, "docs/_config.yml"), encoding: "UTF-8"), aliases: false)
+      site_root = "#{config.fetch('url')}#{config.fetch('baseurl')}"
+      append_to_copied_file(directory, "docs/index.md", "[missing page](#{site_root}/missing/)")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "docs/index.md has broken absolute internal link: /missing/"
+  end
+
   def test_pages_workflow_scopes_pages_permissions_by_job
     path = File.join(ROOT, ".github/workflows/pages.yml")
     workflow = YAML.safe_load(File.read(path, encoding: "UTF-8"), aliases: false)
@@ -185,9 +232,14 @@ class DocsToolingTest < Minitest::Test
 
   def test_full_verifier_accepts_expected_config_url_fields
     stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      config_path = File.join(directory, "docs/_config.yml")
+      old_url = YAML.safe_load(File.read(config_path, encoding: "UTF-8"), aliases: false).fetch("url")
       replace_in_copied_file(directory, "docs/_config.yml") do |text|
-        text.sub("https://scharfsinnig.github.io", "https://example.com")
+        text.sub(old_url, "https://example.com")
             .sub(/^repository_url:.*\n?/, "") + "\nrepository_url: https://example.com/repository\n"
+      end
+      replace_in_copied_file(directory, "docs/index.md") do |text|
+        text.gsub(old_url, "https://example.com")
       end
     end
 
@@ -197,6 +249,16 @@ class DocsToolingTest < Minitest::Test
   def test_full_verifier_rejects_url_in_unexpected_config_field
     stdout, stderr, status = run_full_verifier_with_mutations do |directory|
       append_to_copied_file(directory, "docs/_config.yml", "support_url: https://example.com/help")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "external URLs outside docs/references.md: 1 across 1 files"
+  end
+
+  def test_full_verifier_rejects_unexpected_config_field_reusing_allowed_url
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      config = YAML.safe_load(File.read(File.join(directory, "docs/_config.yml"), encoding: "UTF-8"), aliases: false)
+      append_to_copied_file(directory, "docs/_config.yml", "support_url: #{config.fetch('url')}")
     end
 
     refute status.success?, stdout

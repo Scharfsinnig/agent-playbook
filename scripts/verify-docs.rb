@@ -3,6 +3,7 @@
 
 require "set"
 require "open3"
+require "uri"
 require "yaml"
 
 ROOT = File.expand_path("..", __dir__)
@@ -94,6 +95,23 @@ def internal_targets(text)
   liquid = text.scan(/\{\{\s*['"](\/[^'"]*)['"]\s*\|\s*relative_url\s*\}\}/).flatten
   markdown = text.scan(/\]\((\/[^)\s]+)\)/).flatten
   (liquid + markdown).map { |target| target.split("#", 2).first }.reject(&:empty?)
+end
+
+def internal_route_for_absolute_url(url, config)
+  return unless config.is_a?(Hash)
+
+  site = URI.parse(config["url"].to_s)
+  candidate = URI.parse(url)
+  return unless candidate.scheme == site.scheme && candidate.host == site.host && candidate.port == site.port
+
+  baseurl = config["baseurl"].to_s.delete_suffix("/")
+  return candidate.path if baseurl.empty?
+  return "/" if candidate.path == baseurl
+  return unless candidate.path.start_with?("#{baseurl}/")
+
+  candidate.path.delete_prefix(baseurl)
+rescue URI::InvalidURIError
+  nil
 end
 
 def markdown_table_separator?(line)
@@ -325,15 +343,27 @@ unless structure_only
     relative = path.delete_prefix(ROOT + "/")
     next if relative == "docs/references.md"
 
-    count = File.read(path, encoding: "UTF-8").scan(EXTERNAL_URL_PATTERN).length
+    urls = File.read(path, encoding: "UTF-8").scan(EXTERNAL_URL_PATTERN)
     if relative == "docs/_config.yml" && config.is_a?(Hash)
-      allowed_count = %w[url repository_url].sum do |key|
+      allowed_urls = %w[url repository_url].each_with_object([]) do |key, result|
         value = config[key]
-        value.is_a?(String) ? value.scan(EXTERNAL_URL_PATTERN).length : 0
+        result << value if value.is_a?(String) && value.match?(EXTERNAL_URL_PATTERN)
       end
-      count -= allowed_count
+      allowed_urls.each do |allowed_url|
+        index = urls.index(allowed_url)
+        urls.delete_at(index) if index
+      end
+    elsif relative == "docs/index.md" && config.is_a?(Hash)
+      urls = urls.each_with_object([]) do |url, remaining|
+        route = internal_route_for_absolute_url(url, config)
+        if route.nil?
+          remaining << url
+        elsif !routes.include?(route)
+          errors << "docs/index.md has broken absolute internal link: #{route}"
+        end
+      end
     end
-    result[relative] = count if count.positive?
+    result[relative] = urls.length if urls.any?
   end
   body_url_total = body_url_counts.values.sum
   reference_urls = reference_body.scan(EXTERNAL_URL_PATTERN)

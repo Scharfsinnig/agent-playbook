@@ -13,27 +13,63 @@ part_home: /
 
 本文档不是产品排行榜，也不把“持续进化”理解为生产模型自动改写自己。每一种技术都被放回具体失败、控制边界、证据要求和上线门禁中讨论。
 
-<div class="entry-links">
-  <a href="{{ '/guide/overview/' | relative_url }}">从导读开始</a>
-  <a href="{{ '/references/' | relative_url }}">查看参考资料</a>
-  <a href="{{ '/appendices/appendix-b/' | relative_url }}">打开上线门禁清单</a>
-</div>
+- [从导读开始](https://blog.whispergenie.com/agent-playbook/guide/overview/)
+- [查看参考资料](https://blog.whispergenie.com/agent-playbook/references/)
+- [打开上线门禁清单](https://blog.whispergenie.com/agent-playbook/appendices/appendix-b/)
 
 ## 五篇、二十八章
 
-{% for part in site.data.navigation.parts %}
-### [{{ part.title }}]({{ part.url | relative_url }})
+[导读与全书任务执行链](https://blog.whispergenie.com/agent-playbook/guide/overview/)
 
-<ol class="chapter-list">
-{% for chapter in part.chapters %}
-  <li><a href="{{ chapter.url | relative_url }}">{{ chapter.title }}</a></li>
-{% endfor %}
-</ol>
-{% endfor %}
+### [第一篇：站在 Agent 的视角，看一次任务怎样真正完成](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/)
+
+1. [第 1 章　为什么 Agent 是受约束的闭环系统，而不是“模型加工具”](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/chapter-01/)
+2. [第 2 章　请求进入系统后：如何建立任务契约与完成定义](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/chapter-02/)
+3. [第 3 章　Agent 内部究竟保存什么：状态、上下文、知识和记忆](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/chapter-03/)
+4. [第 4 章　Agent Loop 的逐步运行逻辑：观察、规划、行动、验证与状态转移](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/chapter-04/)
+5. [第 5 章　规划与推理：何时分解、何时搜索、何时重规划](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/chapter-05/)
+6. [第 6 章　工具调用与真实世界行动：从候选动作到可恢复事务](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/chapter-06/)
+7. [第 7 章　验证、纠错和停止：如何避免幻觉、漂移与无限循环](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/chapter-07/)
+8. [第 8 章　人在回路与可恢复的多智能体协作：怎样交接、仲裁与收敛](https://blog.whispergenie.com/agent-playbook/chapters/part-01-runtime/chapter-08/)
+
+### [第二篇：框架与模型如何共同支撑这条执行链](https://blog.whispergenie.com/agent-playbook/chapters/part-02-framework-models/)
+
+1. [第 9 章　Agent 参考架构：控制面、执行面、数据面与学习面](https://blog.whispergenie.com/agent-playbook/chapters/part-02-framework-models/chapter-09/)
+2. [第 10 章　Workflow、单 Agent 与多 Agent 的选择边界](https://blog.whispergenie.com/agent-playbook/chapters/part-02-framework-models/chapter-10/)
+3. [第 11 章　模型在执行链上的角色：它是受约束的决策组件，不是系统本身](https://blog.whispergenie.com/agent-playbook/chapters/part-02-framework-models/chapter-11/)
+4. [第 12 章　Prompt、RAG、工具工程和微调：先修哪一层，取决于失败证据](https://blog.whispergenie.com/agent-playbook/chapters/part-02-framework-models/chapter-12/)
+5. [第 13 章　把经验压进参数之前：SFT、LoRA/QLoRA、DPO、蒸馏、持续预训练与 RL](https://blog.whispergenie.com/agent-playbook/chapters/part-02-framework-models/chapter-13/)
+
+### [第三篇：Agent 如何把任务轨迹转化为受治理的进化](https://blog.whispergenie.com/agent-playbook/chapters/part-03-learning-evolution/)
+
+1. [第 14 章　从轨迹到经验：数据飞轮为何首先是一条治理流水线](https://blog.whispergenie.com/agent-playbook/chapters/part-03-learning-evolution/chapter-14/)
+2. [第 15 章　多时间尺度学习：一次失败不应直接改写全局模型](https://blog.whispergenie.com/agent-playbook/chapters/part-03-learning-evolution/chapter-15/)
+3. [第 16 章　UCB、上下文 Bandit 与 Agent Loop：选择下一臂，不定义任务结束](https://blog.whispergenie.com/agent-playbook/chapters/part-03-learning-evolution/chapter-16/)
+4. [第 17 章　无人工标注学习、内在动机、自博弈、技能发现与世界模型：探索不等于可上线能力](https://blog.whispergenie.com/agent-playbook/chapters/part-03-learning-evolution/chapter-17/)
+5. [第 18 章　奖励、信用分配、离线评估、Reward Hacking 与灾难性遗忘](https://blog.whispergenie.com/agent-playbook/chapters/part-03-learning-evolution/chapter-18/)
+
+### [第四篇：从能够运行，走向能够证明、恢复与治理](https://blog.whispergenie.com/agent-playbook/chapters/part-04-production-governance/)
+
+1. [第 19 章　Agent 评测体系：评的不是一句话，而是一次受控任务](https://blog.whispergenie.com/agent-playbook/chapters/part-04-production-governance/chapter-19/)
+2. [第 20 章　安全与权限：让错误输入不能扩大为错误行动](https://blog.whispergenie.com/agent-playbook/chapters/part-04-production-governance/chapter-20/)
+3. [第 21 章　可靠性工程：可恢复的状态、可解释的证据与可操作的停止](https://blog.whispergenie.com/agent-playbook/chapters/part-04-production-governance/chapter-21/)
+4. [第 22 章　成本、延迟和模型路由：把经济约束写进下一步决策](https://blog.whispergenie.com/agent-playbook/chapters/part-04-production-governance/chapter-22/)
+5. [第 23 章　组织、合规与责任：把治理做成系统接口](https://blog.whispergenie.com/agent-playbook/chapters/part-04-production-governance/chapter-23/)
+
+### [第五篇：用完整案例和建设路线把方法落到实际任务](https://blog.whispergenie.com/agent-playbook/chapters/part-05-cases-roadmap/)
+
+1. [第 24 章　企业研究 Agent：从模糊问题到有证据的交付](https://blog.whispergenie.com/agent-playbook/chapters/part-05-cases-roadmap/chapter-24/)
+2. [第 25 章　客服与业务办理 Agent：从回答问题到受控执行真实业务动作](https://blog.whispergenie.com/agent-playbook/chapters/part-05-cases-roadmap/chapter-25/)
+3. [第 26 章　软件工程 Agent：从需求理解到可审计的变更交付](https://blog.whispergenie.com/agent-playbook/chapters/part-05-cases-roadmap/chapter-26/)
+4. [第 27 章　90 天落地路线与十二个月成熟度建设](https://blog.whispergenie.com/agent-playbook/chapters/part-05-cases-roadmap/chapter-27/)
+5. [第 28 章　架构评审方法：用闭环定位系统缺口](https://blog.whispergenie.com/agent-playbook/chapters/part-05-cases-roadmap/chapter-28/)
+
+[结语](https://blog.whispergenie.com/agent-playbook/guide/conclusion/)
 
 ## 附录
 
-- [150 个关键问题的正文导航索引]({{ '/appendices/appendix-a/' | relative_url }})
-- [架构评审与上线门禁清单]({{ '/appendices/appendix-b/' | relative_url }})
-- [核心状态对象与指标字典]({{ '/appendices/appendix-c/' | relative_url }})
-- [统一参考资料]({{ '/references/' | relative_url }})
+- [附录与工具](https://blog.whispergenie.com/agent-playbook/appendices/)
+- [附录 A：150 个关键问题的正文导航索引](https://blog.whispergenie.com/agent-playbook/appendices/appendix-a/)
+- [附录 B：架构评审与上线门禁清单](https://blog.whispergenie.com/agent-playbook/appendices/appendix-b/)
+- [附录 C：核心状态对象与指标字典](https://blog.whispergenie.com/agent-playbook/appendices/appendix-c/)
+- [参考资料](https://blog.whispergenie.com/agent-playbook/references/)

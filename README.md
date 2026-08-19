@@ -4,7 +4,7 @@ AI Agent Playbook 是一份面向工程实践的系统手册，覆盖 Agent 任�
 
 ## 在线文档
 
-<https://scharfsinnig.github.io/agent-playbook/>
+<https://blog.whispergenie.com/agent-playbook/>
 
 ## 仓库结构
 
