@@ -110,4 +110,35 @@ class DocsToolingTest < Minitest::Test
 
     assert status.success?, [stdout, stderr].reject(&:empty?).join("\n")
   end
+
+  def test_workers_emit_events_and_authorized_reducers_own_work_state_transitions
+    paths = %w[
+      docs/chapters/part-01-runtime/chapter-08.md
+      docs/chapters/part-05-cases-roadmap/chapter-26.md
+      docs/appendices/appendix-c.md
+    ]
+    text = paths.map { |path| File.read(File.join(ROOT, path), encoding: "UTF-8") }.join("\n")
+
+    assert_includes text, "worker 只发出携带 lease ID、fencing token、契约版本和幂等键的状态事件"
+    assert_includes text, "每个 actor 都只提交携带契约版本、取消代次、fencing token、幂等键和证据引用的事件"
+    assert_operator text.scan("授权 reducer").length, :>=, 6
+    assert_includes text, "`work_started` 事件"
+    assert_includes text, "`work_submitted` 事件"
+    refute_match(/worker[^。\n]{0,120}(?:将|把|使) WorkState (?:改为|从|进入)/, text)
+  end
+
+  def test_team_contract_versions_define_safe_effective_time_and_cutover
+    chapter = File.read(File.join(ROOT, "docs/chapters/part-01-runtime/chapter-08.md"), encoding: "UTF-8")
+    appendix = File.read(File.join(ROOT, "docs/appendices/appendix-c.md"), encoding: "UTF-8")
+
+    assert_includes chapter, "每个版本必须声明 `effective_at`、被替代版本、变更类型和 cutover 规则"
+    assert_includes chapter, "权限收紧、取消或安全约束加严的 `effective_at` 不得晚于变更被接受的时刻"
+    assert_includes chapter, "必须立即递增契约/取消代次、撤销相关能力"
+    assert_includes chapter, "将受影响的在途 WorkUnit fence/cancel"
+    assert_includes chapter, "submitted proposal 也不得被自动保留资格"
+    assert_includes chapter, "按当前生效的 Team Contract、权限和完成谓词重新验证"
+    assert_includes appendix, "`effective_at`、`supersedes`、`change_type`、`cutover_mode` 与 `affected_work_units`"
+    assert_includes appendix, "合并服务必须按当前生效的 Team Contract 重验权限、安全约束和完成谓词"
+    refute_includes chapter, "契约发生版本变化时，只影响尚未提交的工作"
+  end
 end

@@ -132,6 +132,7 @@ next_page: /references/
 Team Contract 是 Task Contract 在多智能体执行中的受限展开，不能放宽父契约的权限、预算、期限或禁止动作。建议至少包含以下字段。
 
 - `team_contract_id`、`task_contract_id` 与 `version` 关联团队契约、父任务契约和每次有效变更。
+- `effective_at`、`supersedes`、`change_type`、`cutover_mode` 与 `affected_work_units` 规定版本何时生效、替代谁以及怎样处理在途工作。权限收紧、取消或安全约束加严的 `effective_at` 不得晚于变更被接受的时刻，并必须立即递增契约/取消代次、撤销能力及 fence/cancel 受影响的在途 WorkUnit；只有显式兼容且未受影响的工作才可继续。
 - `topology`、`members` 与 `roles` 描述已经选定的协作结构、成员身份、职责和替补关系；角色名称不自动授予能力。
 - `delegation_rules`、`capability_ceiling` 与 `member_capabilities` 证明子能力是父任务能力的真子集或相等受限集，并记录谁可创建、取消或重派 WorkUnit。
 - `shared_artifact_policy`、`message_policy` 与 `visibility_scope` 规定可以共享哪些版本化制品、哪些消息能转成事件，以及每个成员可见的数据范围。
@@ -161,7 +162,7 @@ team reducer 的发布对象应记录 `reducer_version`、可接受事件类型�
 
 WorkState 是本手册定义的可恢复工作单元状态，不声称是跨框架标准。建议字段包括 `work_state_id`、`work_unit_id`、`state`、`state_version`、`team_contract_version`、`input_snapshot`、`owner`、`attempt`、`lease_id`、`fencing_token`、`last_heartbeat`、`checkpoint_refs`、`artifact_refs`、`command_or_tool_receipts`、`budget_consumed`、`blocked_reason`、`failure_signature`、`cancel_generation`、`recovery_point`、`cleanup_deadline` 和 `last_event_id`。
 
-主状态按 `queued → leased → running → submitted → verifying → merged → done` 推进。侧状态至少包括 `blocked`、`retryable_failed`、`needs_replan`、`escalated`、`cancelled` 和 `expired`。每个转换要定义允许的前态、授权 actor、所需事件和证据、幂等规则及副作用；例如只有验证/合并服务能从 `verifying` 推进到 `merged`，worker 不能直接写 `done`。
+主状态按 `queued → leased → running → submitted → verifying → merged → done` 推进。侧状态至少包括 `blocked`、`retryable_failed`、`needs_replan`、`escalated`、`cancelled` 和 `expired`。每个 actor 都只提交携带契约版本、取消代次、fencing token、幂等键和证据引用的事件；授权 reducer 校验允许前态、当前 token、当前契约与事件证据后，才应用状态转换。worker 不能直接写任何 WorkState，验证/合并服务也以带回执事件请求 `verifying → merged`，而不绕过 reducer。
 
 代码 WorkState 还应增加 `repo_id`、`baseline_commit`、`worktree_id`、规范化 worktree 路径、唯一分支、目标分支、允许路径、环境或容器 digest、文件变更摘要、候选 commit、测试回执和 quarantine 状态。这些字段支持第 26 章的 Git worktree 创建、恢复、验证与清理流程。
 
@@ -179,7 +180,7 @@ Lease 建议包含 `lease_id`、`work_unit_id`、`owner`、`issued_at`、`expire
 
 ## C.22 合并提案与冲突案件 Merge Proposal / Conflict Case
 
-Merge Proposal 至少包含 `proposal_id`、`work_unit_id`、作者与 fencing token、`target_ref`、`target_version`、输入和候选 artifact、change digest、依赖与前置条件、允许写集、验证/测试回执、风险、回滚方式、契约版本、创建时间、状态、verifier 和最终 merge receipt。`submitted`、`verified` 与 `merged` 必须是不同状态；存在 commit 或获得高评分都不等于已集成。
+Merge Proposal 至少包含 `proposal_id`、`work_unit_id`、作者与 fencing token、`target_ref`、`target_version`、输入和候选 artifact、change digest、依赖与前置条件、允许写集、验证/测试回执、风险、回滚方式、创建时契约版本、合并时当前契约版本、创建时间、状态、verifier 和最终 merge receipt。合并服务必须按当前生效的 Team Contract 重验权限、安全约束和完成谓词；`submitted`、`verified` 与 `merged` 必须是不同状态，存在 commit 或获得高评分都不等于已集成。
 
 Conflict Case 至少包含 `conflict_case_id`、涉及的 proposal/artifact/claim、冲突类型、冲突字段或写集、各方证据与版本、受影响 WorkUnit/子图、检测事件、冻结范围、可用确定性规则、仲裁 owner、deadline、决定、理由、采用和拒绝的 artifact、后续重规划以及关闭时间。没有确定性规则时，简单多数或最后一个 Agent 的意见不能关闭冲突。
 

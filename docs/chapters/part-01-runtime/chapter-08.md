@@ -25,7 +25,7 @@ next_page: /chapters/part-02-framework-models/
 
 `Task Contract` 规定请求主体、目标、范围、交付物、完成谓词、禁止副作用、证据、预算和终态。`Team Contract` 在不放宽任务契约的前提下，进一步规定团队成员、角色、责任边界、允许的交互、共享对象、验证和合并权、升级路径、停止规则以及团队预算。任何子 Agent 的能力都只能比父任务更窄：它可以少看数据、少用工具、少写路径，却不能通过委派获得父任务没有的权限或延长父任务的截止时间。
 
-Team Contract 还应说明谁能创建和取消 `WorkUnit`，谁能续租，谁能接受 `Merge Proposal`，什么证据可以满足团队完成谓词，以及控制器故障时由谁接管。契约发生版本变化时，只影响尚未提交的工作；已经产生的制品保留原契约版本，必须经过重新验证才能进入新版本的共享状态。
+Team Contract 还应说明谁能创建和取消 `WorkUnit`，谁能续租，谁能接受 `Merge Proposal`，什么证据可以满足团队完成谓词，以及控制器故障时由谁接管。每个版本必须声明 `effective_at`、被替代版本、变更类型和 cutover 规则。普通兼容变更可以预定生效时刻；权限收紧、取消或安全约束加严的 `effective_at` 不得晚于变更被接受的时刻，控制器必须立即递增契约/取消代次、撤销相关能力，并以更高 fencing token 将受影响的在途 WorkUnit fence/cancel。旧版本 worker 此后只能提交诊断或补偿回执，不能推进共享状态。只有契约明确判定兼容的未受影响工作才可按原版本继续；所有新派发都使用当前版本。已经产生的制品保留原契约版本，submitted proposal 也不得被自动保留资格，合并服务必须按当前生效的 Team Contract、权限和完成谓词重新验证后才能采用。
 
 ### 8.2.2 WorkGraph 与 WorkUnit
 
@@ -37,7 +37,7 @@ Team Contract 还应说明谁能创建和取消 `WorkUnit`，谁能续租，谁�
 
 `TeamState` 或 `SwarmState` 保存团队当前契约、WorkGraph 版本、WorkUnit 索引、共享制品引用、未决冲突、预算、取消代次、完成谓词评估和控制器租约。它是团队执行真相的投影，不是所有聊天记录的拼接。
 
-`WorkState` 是本手册为可恢复工作单元定义的状态对象，不声称是跨框架标准。推荐主生命周期为 `queued → leased → running → submitted → verifying → merged → done`，并保留 `blocked`、`retryable_failed`、`needs_replan`、`escalated`、`cancelled` 和 `expired` 等侧状态。状态转换由事件、前置条件和授权角色共同决定；worker 可以请求转换，却不能自行把 `submitted` 改成 `merged` 或 `done`。
+`WorkState` 是本手册为可恢复工作单元定义的状态对象，不声称是跨框架标准。推荐主生命周期为 `queued → leased → running → submitted → verifying → merged → done`，并保留 `blocked`、`retryable_failed`、`needs_replan`、`escalated`、`cancelled` 和 `expired` 等侧状态。worker 只发出携带 lease ID、fencing token、契约版本和幂等键的状态事件；授权 reducer 校验当前前态、token、契约/取消代次和所需证据后，才把事件应用为 WorkState 转换。重复、过期或迟到 worker 因而不能自行推进共享真相。
 
 ### 8.2.4 Artifact 与 Message/Event
 
@@ -69,19 +69,19 @@ Team Contract 还应说明谁能创建和取消 `WorkUnit`，谁能续租，谁�
 
 ## 8.4 派发、隔离和检查点
 
-控制器只派发依赖已满足的 WorkUnit，并附带输入 artifact 版本、能力令牌、局部预算、deadline、lease 与 fencing token。worker 启动后先校验这些字段，再将状态从 `leased` 转为 `running`。如果输入版本已经过期或本地环境与要求不符，它应返回结构化阻塞事件，而不是基于猜测继续。
+控制器只派发依赖已满足的 WorkUnit，并附带输入 artifact 版本、能力令牌、局部预算、deadline、lease 与 fencing token。worker 启动后先校验这些字段，再发出携带当前 token 的 `work_started` 事件；授权 reducer 只有在 lease、契约版本、取消代次和输入版本仍有效时，才应用 `leased → running`。如果输入版本已经过期或本地环境与要求不符，worker 应发出结构化阻塞事件，而不是基于猜测继续。
 
 隔离至少包含状态、文件或资源写集、凭证和费用归属。不同 worker 不应共享一个可任意改写的对话历史，也不应持有共同的长期凭证。文件型任务可使用独立工作目录，代码任务可使用第 26 章所述 Git worktree；但隔离检出不等于安全沙箱，网络、缓存、端口、数据库和外部副作用仍要由容器、策略与能力网关限制。
 
-长 WorkUnit 要在可验证边界写检查点。检查点包括输入版本、已完成步骤、文件或资源摘要、命令和工具回执、未决假设、预算消耗、lease token 以及下一个安全恢复点。worker 只追加 checkpoint/event，不直接改 TeamState。控制器用幂等键折叠重复事件，用 reducer 生成新投影；恢复者只能相信已持久化的制品和回执，不能假设失联进程内的上下文仍然存在。
+长 WorkUnit 要在可验证边界形成检查点。检查点包括输入版本、已完成步骤、文件或资源摘要、命令和工具回执、未决假设、预算消耗、lease token 以及下一个安全恢复点。worker 发出 token-bearing `checkpointed` 事件和不可变制品；授权 reducer 先拒绝重复、旧契约、旧取消代次或过期 token，再更新 WorkState/TeamState 投影。恢复者只能相信已接受事件所引用的持久制品和回执，不能假设失联进程内的上下文仍然存在。
 
 ## 8.5 提交、独立验证、合并与局部重规划
 
-worker 完成局部工作后，将 WorkState 改为 `submitted`，提交不可变 artifact 或 Merge Proposal。提交不是集成，更不是团队完成。验证器必须在独立身份和尽可能独立的证据路径上检查 schema、来源、权限、目标基线、局部完成谓词、隐藏约束和副作用。为了降低相关偏差，关键结论不应只由使用同一模型、prompt、检索库和工具的另一个角色复述。
+worker 完成局部工作后，提交不可变 artifact 或 Merge Proposal，并发出携带当前 token、契约版本和制品摘要的 `work_submitted` 事件。授权 reducer 验证幂等键、lease、前态、取消代次和制品完整性后，才应用 `running → submitted`。提交不是集成，更不是团队完成。验证器必须在独立身份和尽可能独立的证据路径上检查 schema、来源、当前生效的 Team Contract、权限、目标基线、局部完成谓词、隐藏约束和副作用。为了降低相关偏差，关键结论不应只由使用同一模型、prompt、检索库和工具的另一个角色复述。
 
 验证失败时，系统保留原提案和失败证据，并依据稳定错误分类行动。可修复且仍在预算内的局部错误进入 `retryable_failed`；输入前提失效进入 `needs_replan`；权限、范围或高风险冲突进入 `escalated`；过期 token 或已取消工作进入 `expired` 或 `cancelled`。重试必须获得新 lease 和新 token，且说明相较上次新增的证据、工具或假设；否则 reducer 拒绝同错重试。
 
-验证通过后，只有授权聚合器或确定性合并服务能把提案合入当前目标状态。它在合并前再次检查目标版本和并发写集，合并后记录新 artifact 版本与外部回执，并将 WorkState 依次转为 `merged`、`done`。如果合并改变了其他节点的前提，控制器只重规划受影响子图，保留未受影响的已验证结果；全图从头执行会制造重复劳动，也会丢失可归因证据。
+验证通过后，只有授权聚合器或确定性合并服务能把提案合入当前目标状态。它在合并前再次检查当前契约版本、目标版本和并发写集，合并后发出带集成回执的事件；授权 reducer 据此依次应用 `verifying → merged → done`。如果合并改变了其他节点的前提，控制器只重规划受影响子图，保留未受影响的已验证结果；全图从头执行会制造重复劳动，也会丢失可归因证据。
 
 ## 8.6 停止、取消、清理与经验候选
 

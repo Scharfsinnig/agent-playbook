@@ -68,7 +68,7 @@ Git 的正式术语是 `git worktree` 或 `Git worktree`。一个仓库可以有
 - `recovery_point` 指向最近一次完整持久化的 baseline、change digest、命令回执和 artifact 集合；本地未记录编辑不属于可恢复承诺。
 - `cleanup_deadline`、保留策略与 quarantine 状态决定 worktree 何时可删除。发生安全异常、工具崩溃或结果不明时，应先隔离到期限并保存诊断，而不是立即清理证据。
 
-推荐的状态主线仍是 `queued → leased → running → submitted → verifying → merged → done`。代码 worker 可以创建 commit、推送受限分支或生成 Merge Proposal/PR，使 WorkState 进入 `submitted`；只有合并队列或获授权聚合器验证并集成后，状态才进入 `merged`。即使 commit 干净、测试绿色，worker 也没有把共享目标标记为完成的权限。
+推荐的状态主线仍是 `queued → leased → running → submitted → verifying → merged → done`。代码 worker 可以创建 commit、推送受限分支或生成 Merge Proposal/PR，并发出携带 fencing token、契约版本和候选摘要的提交事件；授权 reducer 校验后才应用 `running → submitted`。合并队列或获授权聚合器验证并集成后同样只发出带回执的合并事件，由 reducer 应用 `verifying → merged`。即使 commit 干净、测试绿色，worker 也没有直接改写 WorkState 或把共享目标标记为完成的权限。
 
 ## 26.5 从创建到清理的操作顺序
 
@@ -76,11 +76,11 @@ Git 的正式术语是 `git worktree` 或 `Git worktree`。一个仓库可以有
 
 2. **分配身份、分支和 linked worktree。** 编排器生成唯一 `repo_id`、`worktree_id`、分支名和路径，再从明确 baseline 创建 linked worktree。创建后读取实际 `HEAD`、分支和 worktree 清单进行对账；路径已存在、分支被占用或 HEAD 不一致都必须失败关闭，不能复用未知目录。
 
-3. **绑定 lease 与执行环境。** 控制器签发带 fencing token 的 lease 和更窄能力，启动批准的容器或执行环境，记录环境 digest、工具版本、网络与缓存策略。worker 只有在确认 baseline、路径和 token 一致后才能把 WorkState 从 `leased` 改为 `running`。
+3. **绑定 lease 与执行环境。** 控制器签发带 fencing token 的 lease 和更窄能力，启动批准的容器或执行环境，记录环境 digest、工具版本、网络与缓存策略。worker 确认 baseline、路径和 token 一致后发出 `work_started` 事件；授权 reducer 只有在当前 lease、契约/取消代次和前态有效时，才应用 `leased → running`。
 
-4. **执行并写检查点。** worker 在 allowed paths 内修改，每到可验证边界就记录文件状态、change digest、已执行命令、测试回执、制品、预算和下一恢复点。依赖安装、代码生成或格式化导致额外文件时，它们同样进入摘要。lease 即将到期时，worker 要先停止新的长动作并持久化，而不是假设一定能续租。
+4. **执行并写检查点。** worker 在 allowed paths 内修改，每到可验证边界就发出 token-bearing `checkpointed` 事件，引用文件状态、change digest、已执行命令、测试回执、制品、预算和下一恢复点；授权 reducer 验证事件后才更新持久投影。依赖安装、代码生成或格式化导致额外文件时，它们同样进入摘要。lease 即将到期时，worker 要先停止新的长动作并持久化，而不是假设一定能续租。
 
-5. **提交候选而非共享真相。** worker 可以在唯一分支创建 commit，或直接生成含 patch 的 Merge Proposal/PR。提案绑定 baseline、候选 commit/change digest、允许路径检查、测试与扫描回执、未覆盖风险、回滚方法以及 fencing token。提交后 WorkState 为 `submitted`，worker 不再修改同一提案；新的修改形成新版本。
+5. **提交候选而非共享真相。** worker 可以在唯一分支创建 commit，或直接生成含 patch 的 Merge Proposal/PR。提案绑定 baseline、候选 commit/change digest、允许路径检查、测试与扫描回执、未覆盖风险、回滚方法以及 fencing token。worker 随后发出 `work_submitted` 事件；授权 reducer 校验 token、当前契约、取消代次、前态和制品摘要后才应用 `running → submitted`。worker 不再修改同一提案；新的修改形成新版本。
 
 6. **在当前目标上独立验证和合并。** 合并队列或独立 verifier 重新读取目标分支，检查 lease、契约、路径、秘密和供应链变化，把候选重基或试合并到当前目标，再运行要求的测试。对 baseline 已过期、语义冲突或测试只在旧目标通过的提案，系统创建 Conflict Case 或转 `needs_replan`；不能因为 worker 已有 commit 就跳过重验。只有受保护检查和必要批准通过后，授权服务才合并并记录集成 commit。
 
