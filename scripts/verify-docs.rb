@@ -18,7 +18,9 @@ INDUSTRY_TERMS = %w[产业级 产业实践 产业现场 产业价值 产业案�
 EXTERNAL_URL_PATTERN = %r!https?://[^\s)>"']+!
 REFERENCE_HEADING_PATTERN = /^### (R\d{2,}) · (\S(?:.*\S)?) \{#(r\d{2,})\}\s*$/
 REFERENCE_HEADING_CANDIDATE_PATTERN = /^###\s+R\d{2,}\b.*$/
-BODY_REFERENCE_PATTERN = /\[(R\d{2,})\]\(\{\{ '\/references\/#(r\d{2,})' \| relative_url \}\}\)/
+BODY_REFERENCE_PATTERN = /\A\[(R\d{2,})\]\(\{\{ '\/references\/#(r\d{2,})' \| relative_url \}\}\)\z/
+BODY_REFERENCE_LINK_PATTERN = /\[([^\]\r\n]*)\]\(\{\{\s*(['"])\/references\/#([rR]\d{2,})\2\s*\|\s*relative_url\s*\}\}\)/
+BODY_REFERENCE_ROUTE_PATTERN = /\{\{\s*(['"])\/references\/#([rR]\d{2,})\1\s*\|\s*relative_url\s*\}\}/
 
 def expected_pages
   pages = {
@@ -268,18 +270,26 @@ unless structure_only
   reference_ids = ordered_definition_ids.to_set
   body_reference_ids = Set.new
   pages.reject { |page| page[:path] == "docs/references.md" }.each do |page|
-    scrubbed = page[:body].gsub(BODY_REFERENCE_PATTERN) do |citation|
-      id = Regexp.last_match(1)
-      anchor = Regexp.last_match(2)
-      if id.downcase == anchor
-        body_reference_ids << id
-        " " * citation.length
+    invalid_reference_labels = []
+    scrubbed = page[:body].gsub(BODY_REFERENCE_LINK_PATTERN) do |citation|
+      candidate_match = Regexp.last_match
+      label = candidate_match[1]
+      candidate_anchor = candidate_match[3]
+      exact_match = citation.match(BODY_REFERENCE_PATTERN)
+      if exact_match && exact_match[1].downcase == exact_match[2]
+        body_reference_ids << exact_match[1]
       else
-        citation
+        invalid_reference_labels << (label.empty? ? candidate_anchor : label)
       end
+      " " * citation.length
+    end
+    scrubbed = scrubbed.gsub(BODY_REFERENCE_ROUTE_PATTERN) do |route|
+      invalid_reference_labels << Regexp.last_match(2)
+      " " * route.length
     end
     invalid_ids = scrubbed.scan(/\bR\d{2,}\b/).uniq.sort
-    errors << "invalid body reference syntax in #{page[:path]}: #{invalid_ids.join(', ')}" unless invalid_ids.empty?
+    invalid_markers = (invalid_reference_labels + invalid_ids).uniq.sort
+    errors << "invalid body reference syntax in #{page[:path]}: #{invalid_markers.join(', ')}" unless invalid_markers.empty?
   end
 
   missing_references = body_reference_ids - reference_ids

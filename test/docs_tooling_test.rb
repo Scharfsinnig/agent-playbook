@@ -143,6 +143,24 @@ class DocsToolingTest < Minitest::Test
     assert_includes stderr, "invalid body reference syntax in docs/guide/overview.md: R01"
   end
 
+  def test_full_verifier_rejects_alternate_body_reference_label
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/guide/overview.md", "[source]({{ '/references/#r01' | relative_url }})")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "invalid body reference syntax in docs/guide/overview.md: source"
+  end
+
+  def test_full_verifier_rejects_lowercase_body_reference_label
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/guide/overview.md", "[r01]({{ '/references/#r01' | relative_url }})")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "invalid body reference syntax in docs/guide/overview.md: r01"
+  end
+
   def test_full_verifier_rejects_duplicate_reference_definition
     stdout, stderr, status = run_full_verifier_with_mutations do |directory|
       path = File.join(directory, "docs/references.md")
