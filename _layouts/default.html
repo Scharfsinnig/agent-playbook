@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>{% if page.title %}{{ page.title }} · {% endif %}{{ site.title }}</title>
+    <meta name="description" content="{{ page.description | default: site.description | escape }}">
+    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到正文</a>
+    <header class="site-header">
+      <a class="brand" href="{{ '/' | relative_url }}">AI Agent Playbook</a>
+      <nav class="header-links" aria-label="快捷入口">
+        <a href="{{ '/handbook/00-overview/' | relative_url }}">导读</a>
+        <a href="{{ '/handbook/full/' | relative_url }}">完整手册</a>
+        <a href="{{ '/handbook/appendices/appendix-b/' | relative_url }}">上线门禁</a>
+        <a href="https://github.com/Scharfsinnig/agent-playbook">GitHub</a>
+      </nav>
+    </header>
+
+    <div class="site-shell">
+      <aside class="sidebar" aria-label="手册目录">
+        <a class="sidebar-home" href="{{ '/handbook/' | relative_url }}">手册目录</a>
+        {% for part in site.data.navigation.parts %}
+          <details class="nav-group"{% if page.url contains part.url %} open{% endif %}>
+            <summary><a href="{{ part.url | relative_url }}">{{ part.title }}</a></summary>
+            <ol>
+              {% for chapter in part.chapters %}
+                <li{% if page.url == chapter.url %} class="current"{% endif %}>
+                  <a href="{{ chapter.url | relative_url }}"{% if page.url == chapter.url %} aria-current="page"{% endif %}>{{ chapter.title }}</a>
+                </li>
+              {% endfor %}
+            </ol>
+          </details>
+        {% endfor %}
+        <details class="nav-group"{% if page.url contains '/handbook/appendices/' %} open{% endif %}>
+          <summary><a href="{{ '/handbook/appendices/' | relative_url }}">附录与工具</a></summary>
+          <ul>
+            <li><a href="{{ '/handbook/appendices/appendix-a/' | relative_url }}">150 问索引</a></li>
+            <li><a href="{{ '/handbook/appendices/appendix-b/' | relative_url }}">架构评审与上线门禁</a></li>
+            <li><a href="{{ '/handbook/appendices/appendix-c/' | relative_url }}">状态对象与指标字典</a></li>
+            <li><a href="{{ '/handbook/appendices/appendix-d/' | relative_url }}">一手资料入口</a></li>
+          </ul>
+        </details>
+      </aside>
+
+      <main class="content" id="main-content">
+        {{ content }}
+
+        {% if page.previous_page or page.next_page %}
+          <nav class="page-nav" aria-label="前后页面">
+            <div>
+              {% if page.previous_page %}
+                <a href="{{ page.previous_page | relative_url }}">← 上一页</a>
+              {% endif %}
+            </div>
+            <div class="page-nav-center">
+              {% if page.part_home %}
+                <a href="{{ page.part_home | relative_url }}">返回本篇／目录</a>
+              {% endif %}
+            </div>
+            <div>
+              {% if page.next_page %}
+                <a href="{{ page.next_page | relative_url }}">下一页 →</a>
+              {% endif %}
+            </div>
+          </nav>
+        {% endif %}
+      </main>
+    </div>
+
+    <footer class="site-footer">
+      <span>AI Agent Playbook · 资料核验截至 2026-08-19</span>
+      <span>内容用于工程与治理参考，不替代具体法律、行业或组织判断。</span>
+    </footer>
+  </body>
+</html>
