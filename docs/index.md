@@ -1,6 +1,6 @@
 ---
 layout: default
-title: AI Agent 技术框架、任务执行与持续进化实践手册
+title: 首页
 description: AI Agent 技术框架、任务执行、模型适配、持续学习与生产治理手册
 permalink: /
 next_page: /guide/overview/

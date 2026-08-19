@@ -113,6 +113,14 @@ class DocsToolingTest < Minitest::Test
     end
   end
 
+  def test_homepage_browser_title_does_not_repeat_the_site_title
+    config = YAML.safe_load(File.read(File.join(ROOT, "docs/_config.yml"), encoding: "UTF-8"), aliases: false)
+    homepage = File.read(File.join(ROOT, "docs/index.md"), encoding: "UTF-8")
+    front_matter = YAML.safe_load(homepage.split("---", 3).fetch(1), aliases: false)
+
+    refute_equal config.fetch("title"), front_matter.fetch("title")
+  end
+
   def test_full_verifier_accepts_declared_site_urls_in_homepage
     stdout, stderr, status = run_full_verifier_with_mutations do |directory|
       config = YAML.safe_load(File.read(File.join(directory, "docs/_config.yml"), encoding: "UTF-8"), aliases: false)
