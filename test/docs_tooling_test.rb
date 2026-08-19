@@ -4,6 +4,7 @@ require "minitest/autorun"
 require "fileutils"
 require "open3"
 require "tmpdir"
+require "yaml"
 
 class DocsToolingTest < Minitest::Test
   ROOT = File.expand_path("..", __dir__)
@@ -78,6 +79,24 @@ class DocsToolingTest < Minitest::Test
     %w[_config.yml _data _layouts assets index.md 404.md].each do |legacy_path|
       refute File.exist?(File.join(ROOT, legacy_path)), "legacy path remains: #{legacy_path}"
     end
+  end
+
+  def test_pages_workflow_scopes_pages_permissions_by_job
+    path = File.join(ROOT, ".github/workflows/pages.yml")
+    workflow = YAML.safe_load(File.read(path, encoding: "UTF-8"), aliases: false)
+    jobs = workflow.fetch("jobs")
+
+    assert_equal({ "contents" => "read", "pages" => "read" }, jobs.fetch("build")["permissions"])
+    assert_equal({ "pages" => "write", "id-token" => "write" }, jobs.fetch("deploy").fetch("permissions"))
+    pages_writers = jobs.each_with_object([]) do |(name, job), result|
+      result << name if job.dig("permissions", "pages") == "write"
+    end
+    oidc_writers = jobs.each_with_object([]) do |(name, job), result|
+      result << name if job.dig("permissions", "id-token") == "write"
+    end
+
+    assert_equal ["deploy"], pages_writers
+    assert_equal ["deploy"], oidc_writers
   end
 
   def test_assembler_emits_one_ordered_document_without_front_matter
