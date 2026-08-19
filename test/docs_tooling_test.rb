@@ -12,6 +12,15 @@ class DocsToolingTest < Minitest::Test
     Open3.capture3(*arguments, chdir: ROOT)
   end
 
+  def assemble_handbook
+    Dir.mktmpdir("agent-playbook-test") do |directory|
+      output = File.join(directory, "assembled.md")
+      stdout, stderr, status = run_script("ruby", "scripts/assemble-handbook.rb", output)
+      assert status.success?, [stdout, stderr].reject(&:empty?).join("\n")
+      yield File.read(output, encoding: "UTF-8")
+    end
+  end
+
   def run_structure_verifier_with(body_fragment)
     Dir.mktmpdir("agent-playbook-verifier-test") do |directory|
       FileUtils.cp_r(File.join(ROOT, "docs"), directory)
@@ -72,28 +81,49 @@ class DocsToolingTest < Minitest::Test
   end
 
   def test_assembler_emits_one_ordered_document_without_front_matter
-    Dir.mktmpdir("agent-playbook-test") do |directory|
-      output = File.join(directory, "assembled.md")
-      stdout, stderr, status = run_script("ruby", "scripts/assemble-handbook.rb", output)
-
-      assert status.success?, [stdout, stderr].reject(&:empty?).join("\n")
-      text = File.read(output, encoding: "UTF-8")
+    assemble_handbook do |text|
       refute_match(/\A---\s*$/, text)
-      assert_equal 28, text.scan(/^## 第 \d+ 章/u).length
 
       positions = [
         "# AI Agent 技术框架、任务执行与持续进化实践手册",
         "## 第一篇：站在 Agent 的视角，看一次任务怎样真正完成",
-        "## 第 1 章",
-        "## 第 28 章",
+        "### 第 1 章",
+        "### 第 28 章",
         "## 结语：",
         "## 附录 A：",
         "## 附录 C：",
-        "## 附录 D："
+        "## 参考资料"
       ].map { |marker| text.index(marker) }
 
       assert positions.all?, "assembled document is missing an expected section"
       assert_equal positions.sort, positions, "assembled sections are out of order"
+    end
+  end
+
+  def test_assembler_emits_the_exact_handbook_heading_hierarchy
+    assemble_handbook do |text|
+      assert_equal 1, text.scan(/^# AI Agent 技术框架、任务执行与持续进化实践手册$/).length
+      assert_equal 5, text.scan(/^## 第[一二三四五]篇：/).length
+      assert_equal 28, text.scan(/^### 第 \d+ 章/u).length
+      assert_match(/^#### 1\.1\s/u, text)
+      refute_match(/^(?:#){1,3} \d+\.\d+\s/u, text)
+      refute_match(/^(?:#){5,6} \d+\.\d+\s/u, text)
+      assert_match(/^##### \d+\.\d+\.\d+\s/u, text)
+      refute_match(/^(?:#){1,4} \d+\.\d+\.\d+\s/u, text)
+      refute_match(/^###### \d+\.\d+\.\d+\s/u, text)
+      assert_equal 1, text.scan(/^## 结语：/).length
+      assert_equal 3, text.scan(/^## 附录 [A-C]：/).length
+      assert_equal 1, text.scan(/^## 参考资料$/).length
+      refute_match(/^## 第 \d+ 章/u, text)
+    end
+  end
+
+  def test_assembler_resolves_jekyll_liquid_and_internal_links
+    assemble_handbook do |text|
+      refute_includes text, "{{"
+      refute_includes text, "{%"
+      refute_match(/\]\(\//, text)
+      assert_operator text.scan(/\[R\d{2,}\]\(#r\d{2,}\)/).length, :>, 0
     end
   end
 

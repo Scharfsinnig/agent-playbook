@@ -1,12 +1,12 @@
 ---
 layout: default
-title: 附录 D：统一参考资料
+title: 参考资料
 permalink: /references/
 part_home: /appendices/
 previous_page: /appendices/appendix-c/
 ---
 
-# 附录 D：统一参考资料
+# 参考资料
 
 本页集中收录正文所用的论文、项目规范、官方文档和监管原文。每条只界定可支持的论断与不能外推的边界；软件、协议与法规类资料均以 2026-08-19 为核验时点，实施时仍需固定版本并重新核对。
 

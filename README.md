@@ -1,11 +1,24 @@
 # AI Agent Playbook
 
-AI Agent Playbook 是一份面向产业实践的系统化手册，围绕 Agent 如何理解任务、规划与执行、调用工具、管理状态、验证结果以及持续学习展开。
-
-内容覆盖框架与模型选型、上下文工程、记忆系统、微调与强化学习、多 Agent 协作、评测与可观测性、生产可靠性、安全治理、持续进化机制和产业案例，重点讲清楚从原理判断到工程落地的完整路径。
+AI Agent Playbook 是一份面向工程实践的系统手册，覆盖 Agent 任务执行、框架与模型、上下文与记忆、训练与学习、多智能体协作、评测、可靠性、安全治理和持续进化。
 
 ## 在线文档
 
 <https://scharfsinnig.github.io/agent-playbook/>
 
-资料核验截至 2026-08-19。法规、协议和快速演进的软件版本在实际使用前应重新核对。
+## 仓库结构
+
+- `docs/`：手册正文，也是 Jekyll 的唯一内容源。
+- `scripts/`：文档验证与单文件组装工具。
+- `test/`：文档工具测试。
+- `.github/workflows/`：Pull Request 验证与 GitHub Pages 发布流程。
+
+## 本地验证
+
+```sh
+ruby -Itest test/docs_tooling_test.rb
+ruby scripts/verify-docs.rb
+ruby scripts/assemble-handbook.rb
+```
+
+编辑规则与提交流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。

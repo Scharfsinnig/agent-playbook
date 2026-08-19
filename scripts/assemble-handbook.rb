@@ -103,6 +103,13 @@ def shift_headings(body, amount)
   end.join
 end
 
+def heading_shift_for(relative_path)
+  return 0 if relative_path == "guide/overview.md"
+  return 2 if relative_path.match?(%r{\Achapters/[^/]+/chapter-\d{2}\.md\z})
+
+  1
+end
+
 pages = source_paths.map { |path| parse_page(path) }
 anchors = pages.each_with_object({}) do |page, result|
   permalink = page[:data]["permalink"]
@@ -110,9 +117,9 @@ anchors = pages.each_with_object({}) do |page, result|
   result[permalink] = heading_anchor(title.to_s) if permalink
 end
 
-sections = pages.each_with_index.map do |page, index|
+sections = pages.map do |page|
   body = convert_internal_links(page[:body], anchors)
-  body = shift_headings(body, 1) unless index.zero?
+  body = shift_headings(body, heading_shift_for(page[:path]))
   body.strip
 end
 
