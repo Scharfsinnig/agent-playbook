@@ -88,6 +88,32 @@ def internal_targets(text)
   (liquid + markdown).map { |target| target.split("#", 2).first }.reject(&:empty?)
 end
 
+def markdown_table_separator?(line)
+  candidate = line.strip
+  return false unless candidate.include?("|")
+
+  candidate = candidate[1..-1].to_s.strip if candidate.start_with?("|")
+  candidate = candidate[0...-1].strip if candidate.end_with?("|")
+  cells = candidate.split("|", -1).map(&:strip)
+  cells.length >= 2 && cells.all? { |cell| cell.match?(/\A:?-{3,}:?\z/) }
+end
+
+def markdown_table_row?(line)
+  candidate = line.strip
+  return false unless candidate.include?("|")
+
+  candidate = candidate[1..-1].to_s if candidate.start_with?("|")
+  candidate = candidate[0...-1] if candidate.end_with?("|")
+  candidate.split("|", -1).length >= 2
+end
+
+def markdown_table_count(body)
+  lines = body.lines
+  lines.each_index.count do |index|
+    index.positive? && markdown_table_separator?(lines[index]) && markdown_table_row?(lines[index - 1])
+  end
+end
+
 structure_only = false
 ARGV.each do |argument|
   if argument == "--structure-only"
@@ -178,12 +204,13 @@ end
 errors << "docs/ must not contain README.md files" unless Dir.glob(File.join(DOCS, "**", "README.md")).empty?
 
 forbidden = {
-  "Markdown table" => /^\s*\|.*\|\s*$/,
   "Mermaid block" => /^\s*```mermaid\b/i,
-  "Markdown image" => /!\[[^\]]*\]\([^)]+\)/,
+  "Markdown image" => /!\[[^\]]*\](?:\s*\([^)]*\)|\s*\[[^\]]*\])?/,
   "HTML image or SVG" => /<(?:img|svg)\b/i
 }
 pages.each do |page|
+  table_count = markdown_table_count(page[:body])
+  errors << "Markdown table is forbidden in #{page[:path]} (#{table_count})" if table_count.positive?
   forbidden.each do |name, pattern|
     count = page[:body].scan(pattern).length
     errors << "#{name} is forbidden in #{page[:path]} (#{count})" if count.positive?

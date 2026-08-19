@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require "fileutils"
 require "open3"
 require "tmpdir"
 
@@ -9,6 +10,25 @@ class DocsToolingTest < Minitest::Test
 
   def run_script(*arguments)
     Open3.capture3(*arguments, chdir: ROOT)
+  end
+
+  def run_structure_verifier_with(body_fragment)
+    Dir.mktmpdir("agent-playbook-verifier-test") do |directory|
+      FileUtils.cp_r(File.join(ROOT, "docs"), directory)
+      FileUtils.mkdir_p(File.join(directory, "scripts"))
+      FileUtils.cp(File.join(ROOT, "scripts/verify-docs.rb"), File.join(directory, "scripts"))
+      File.open(File.join(directory, "docs/guide/overview.md"), "a", encoding: "UTF-8") do |file|
+        file.write("\n#{body_fragment}\n")
+      end
+      return Open3.capture3("ruby", "scripts/verify-docs.rb", "--structure-only", chdir: directory)
+    end
+  end
+
+  def assert_forbidden_content(fragment, expected_error)
+    stdout, stderr, status = run_structure_verifier_with(fragment)
+
+    refute status.success?, stdout
+    assert_includes stderr, expected_error
   end
 
   def test_structure_verifier_accepts_the_migrated_repository
@@ -67,5 +87,27 @@ class DocsToolingTest < Minitest::Test
 
     refute status.success?, "legacy content should keep the full gate red during Task 1"
     assert_includes [stdout, stderr].join("\n"), "Legacy industry wording: #{expected_count} occurrences"
+  end
+
+  def test_structure_verifier_rejects_table_with_edge_pipes
+    assert_forbidden_content("| A | B |\n| --- | --- |\n| one | two |", "Markdown table is forbidden")
+  end
+
+  def test_structure_verifier_rejects_table_without_edge_pipes
+    assert_forbidden_content("A | B\n--- | ---\none | two", "Markdown table is forbidden")
+  end
+
+  def test_structure_verifier_rejects_inline_image
+    assert_forbidden_content("![architecture](architecture.png)", "Markdown image is forbidden")
+  end
+
+  def test_structure_verifier_rejects_reference_style_image
+    assert_forbidden_content("![architecture][diagram]\n\n[diagram]: architecture.png", "Markdown image is forbidden")
+  end
+
+  def test_structure_verifier_allows_an_ordinary_vertical_bar
+    stdout, stderr, status = run_structure_verifier_with("Use A | B to describe two alternatives in prose.")
+
+    assert status.success?, [stdout, stderr].reject(&:empty?).join("\n")
   end
 end
