@@ -1,13 +1,13 @@
 ---
 layout: default
-title: 第五篇：用完整案例和建设路线把方法落到产业现场
+title: 第五篇：用完整案例和建设路线把方法落到实际任务
 permalink: /chapters/part-05-cases-roadmap/
 part_home: /
 previous_page: /chapters/part-04-production-governance/chapter-23/
 next_page: /chapters/part-05-cases-roadmap/chapter-24/
 ---
 
-# 第五篇：用完整案例和建设路线把方法落到产业现场
+# 第五篇：用完整案例和建设路线把方法落到实际任务
 
 理论只有在具体任务中逐步运行，才能暴露缺口。第五篇选择企业研究、客服业务办理和软件工程三类 Agent：第一类主要改变信息和判断，第二类会改变真实订单与资金状态，第三类拥有文件、命令、代码仓库与发布链路。三者都按同一套十三阶段任务闭环推演，以便比较风险、验证和学习方式怎样随场景变化。
 

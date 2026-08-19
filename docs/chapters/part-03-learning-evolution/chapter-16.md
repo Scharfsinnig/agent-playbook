@@ -11,7 +11,7 @@ next_page: /chapters/part-03-learning-evolution/chapter-17/
 
 ## 16.1 Bandit 在 Agent 中是一个局部选择器
 
-多臂 Bandit 描述的是重复的“看到上下文、选择一个臂、观察所选臂 reward”的问题。上下文 Bandit（contextual bandit）把当前任务特征纳入选择，例如文档长度、语言、风险等级、历史检索置信度、预计成本和是否有强 verifier。UCB（Upper Confidence Bound）类算法通常将某个臂的估计回报与不确定性上界相加，让未充分尝试的臂获得探索机会；LinUCB 等模型进一步用特征预测不同上下文下的收益。其经典目标是平衡探索与利用、控制累计 regret，而不是生成计划或证明完成。[Auer, Cesa-Bianchi and Fischer, UCB](https://link.springer.com/article/10.1023/A:1013689704352)
+多臂 Bandit 描述的是重复的“看到上下文、选择一个臂、观察所选臂 reward”的问题。上下文 Bandit（contextual bandit）把当前任务特征纳入选择，例如文档长度、语言、风险等级、历史检索置信度、预计成本和是否有强 verifier。UCB（Upper Confidence Bound）类算法通常将某个臂的估计回报与不确定性上界相加，让未充分尝试的臂获得探索机会；LinUCB 等模型进一步用特征预测不同上下文下的收益。其经典目标是平衡探索与利用、控制累计 regret，而不是生成计划或证明完成。[R32]({{ '/references/#r32' | relative_url }}) [R33]({{ '/references/#r33' | relative_url }})
 
 采购 Agent 的一个合理 Bandit 点是“在已批准的三个模型配置中，哪一个负责将条款抽取成草稿”：小模型成本低，强模型质量高，专业模型对扫描 PDF 更稳。另一个是“选择哪个已验证的检索器/重排器”。每次选择的 reward 可以在一个约定窗口内由结构化抽取正确、人工改写量、成本和延迟组成。这里的臂不是“是否有权限修改合同”；权限必须先由策略系统决定。也不是“是否已完成任务”；完成需要独立的验收谓词。
 
@@ -19,15 +19,15 @@ next_page: /chapters/part-03-learning-evolution/chapter-17/
 
 UCB 回答的是“若还要再进行一次选择，哪个臂值得选”，它通常假定持续交互并累积奖励。Agent loop 的停止却是另一个决策：当前任务是否已经满足完成谓词，继续行动的预期价值是否低于成本和风险，是否应因阻塞、预算耗尽、循环或不确定性而交接。即使把 `stop` 做成一个臂，仍必须由运行时定义什么时候 stop 合法、如何验证完成、何时强制停止以及是否允许继续；否则 Bandit 可能为探索而继续调用工具，或过早因短期 reward 选择停止。
 
-正确架构是先由状态机计算硬终态：成功的外部验收、策略拒绝、超时/预算硬熔断、取消、不可恢复错误或等待审批。仅在这些条件都未触发、且有多个安全的下一步候选时，Bandit 才为局部路由提供建议。运行时还应比较继续计算的机会成本、风险和延迟；对高风险或不可逆动作，候选集合本身就不应包含自由探索臂。若目标是以给定置信度从一批候选中识别最佳方案，应使用带显式停止规则的 best-arm identification，而不是把累计 regret 的 UCB 当作结束条件；Track-and-Stop 是此类问题的代表方法。[Garivier and Kaufmann, Track-and-Stop](https://proceedings.mlr.press/v49/garivier16a.html)
+正确架构是先由状态机计算硬终态：成功的外部验收、策略拒绝、超时/预算硬熔断、取消、不可恢复错误或等待审批。仅在这些条件都未触发、且有多个安全的下一步候选时，Bandit 才为局部路由提供建议。运行时还应比较继续计算的机会成本、风险和延迟；对高风险或不可逆动作，候选集合本身就不应包含自由探索臂。若目标是以给定置信度从一批候选中识别最佳方案，应使用带显式停止规则的 best-arm identification，而不是把累计 regret 的 UCB 当作结束条件；Track-and-Stop 就把抽样规则与停止规则组合起来解决这一类识别问题。[R09]({{ '/references/#r09' | relative_url }})
 
 这一区分可落实到运行时 API：`select_arm(context, safe_candidates)` 只返回一个候选模型、检索器或已批准动作配置及其不确定性；`transition(state, observation)` 才根据完成谓词、策略、预算和验证器返回 `CONTINUE`、`WAIT_APPROVAL`、`HANDOFF`、`COMPENSATE` 或终态。前者不能把一个未经授权的写动作加入 candidate set，后者也不能因为 Bandit 估计某臂奖励更高就跳过完成核验。把两个接口、日志和 owner 分开，是避免“局部路由算法接管整个 Agent loop”的最直接工程手段。
 
 ## 16.3 实现前提：日志概率、反馈时钟与安全候选集
 
-离线评估或后续学习 Bandit 时，日志必须记录：上下文特征及其版本、候选臂集合、所选臂、logging policy 给该臂的 propensity、选择时刻、reward 定义版本、reward 的观察时刻与缺失原因、模型/工具/环境版本、硬约束是否触发。没有 propensity，就无法可靠地用 inverse propensity scoring（IPS）或 doubly robust（DR）估计一个新策略本会怎样表现；没有候选集和时间戳，也难以判断 support 是否重叠。DR 和 IPS 不是“自动消偏”按钮，其有效性依赖行为策略覆盖、模型假设和足够有效样本量。[Dudík et al., Doubly Robust Policy Evaluation](https://arxiv.org/abs/1103.4601)
+离线评估或后续学习 Bandit 时，日志必须记录：上下文特征及其版本、候选臂集合、所选臂、logging policy 给该臂的 propensity、选择时刻、reward 定义版本、reward 的观察时刻与缺失原因、模型/工具/环境版本、硬约束是否触发。没有 propensity，就无法可靠地用 inverse propensity scoring（IPS）或 doubly robust（DR）估计一个新策略本会怎样表现；没有候选集和时间戳，也难以判断 support 是否重叠。DR 和 IPS 不是“自动消偏”按钮，其有效性依赖行为策略覆盖、模型假设和足够有效样本量。[R34]({{ '/references/#r34' | relative_url }})
 
-上线前应报告 overlap、importance weight 分布、effective sample size（ESS）、估计区间和对策略偏离的敏感性。新策略想选的臂若在历史相似上下文中几乎从未出现，OPE 的置信区间不可信；此处不能凭一个高估分发布，只能限制新策略、收集受控数据或回到规则/强模型。离线 RL 的相同困难常称为 distributional shift 或 support mismatch，保守方法如 CQL 的思想正是避免对数据支持外动作过度乐观。[Kumar et al., Conservative Q-Learning](https://arxiv.org/abs/2006.04779)
+上线前应报告 overlap、importance weight 分布、effective sample size（ESS）、估计区间和对策略偏离的敏感性。新策略想选的臂若在历史相似上下文中几乎从未出现，OPE 的置信区间不可信；此处不能凭一个高估分发布，只能限制新策略、收集受控数据或回到规则/强模型。离线 RL 的相同困难常称为 distributional shift 或 support mismatch；CQL 通过压低数据支持之外动作的估值，给出一种保守处理思路。[R35]({{ '/references/#r35' | relative_url }})
 
 Bandit 还要求 reward 在可用窗口内足够可靠。若采购 Agent 以“用户点击通知”作 reward，可能偏好夸张通知而忽略变更是否真正落地；若两周后才知道项目延期是否减少，短期奖励会产生选择偏差。应定义观察窗口和缺失机制，保留长期 holdout 与业务结果校验；只有一次性或短期可归因选择适合 Bandit。涉及多步、长期延迟、状态会因早期动作而改变的问题，应采用明确的状态机、搜索、MDP/RL 或人工流程，而不是把每一步假装成独立臂。
 

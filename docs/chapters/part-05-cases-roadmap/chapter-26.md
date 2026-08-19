@@ -47,7 +47,7 @@ next_page: /chapters/part-05-cases-roadmap/chapter-27/
 
 ## 26.3 Git worktree 提供什么，又不提供什么
 
-Git 的正式术语是 `git worktree` 或 `Git worktree`。一个仓库可以有一个主工作树和多个 linked worktree；它们共享对象库与部分仓库元数据，但每个检出拥有独立的工作目录、`HEAD` 和 index。因此，多个代码 WorkUnit 可以从同一明确的 baseline commit 建立独立检出，在各自分支编辑、暂存和测试，减少普通文件互相覆盖，也便于把目录、分支和候选提交绑定到 WorkState。
+Git 的正式术语是 `git worktree` 或 `Git worktree`。一个仓库可以有一个主工作树和多个 linked worktree；它们共享对象库与部分仓库元数据，但每个检出拥有独立的工作目录、`HEAD` 和 index。因此，多个代码 WorkUnit 可以从同一明确的 baseline commit 建立独立检出，在各自分支编辑、暂存和测试，减少普通文件互相覆盖，也便于把目录、分支和候选提交绑定到 WorkState。[R17]({{ '/references/#r17' | relative_url }})
 
 这种能力只解决“独立检出”，不解决整个协作协议。Git worktree 不是 WorkGraph 或任务树，不保存消息、记忆、lease、预算、完成谓词或人工审批；一次 commit 也不等于已集成。linked worktree 共享仓库对象与部分 refs，错误命令仍可能影响其他分支、远端或仓库配置。它也不隔离依赖缓存、网络端口、数据库、云凭证、进程、容器、远端服务和任何外部副作用。因此还需要沙箱、短期能力、路径策略、资源配额、网络策略和外部系统的事务控制。
 

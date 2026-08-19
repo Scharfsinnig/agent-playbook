@@ -24,6 +24,28 @@ class DocsToolingTest < Minitest::Test
     end
   end
 
+  def run_full_verifier_with_mutations
+    Dir.mktmpdir("agent-playbook-verifier-test") do |directory|
+      FileUtils.cp_r(File.join(ROOT, "docs"), directory)
+      FileUtils.mkdir_p(File.join(directory, "scripts"))
+      FileUtils.cp(File.join(ROOT, "scripts/verify-docs.rb"), File.join(directory, "scripts"))
+      yield directory
+      return Open3.capture3("ruby", "scripts/verify-docs.rb", chdir: directory)
+    end
+  end
+
+  def append_to_copied_file(directory, relative_path, fragment)
+    File.open(File.join(directory, relative_path), "a", encoding: "UTF-8") do |file|
+      file.write("\n#{fragment}\n")
+    end
+  end
+
+  def replace_in_copied_file(directory, relative_path)
+    path = File.join(directory, relative_path)
+    text = File.read(path, encoding: "UTF-8")
+    File.write(path, yield(text), encoding: "UTF-8")
+  end
+
   def assert_forbidden_content(fragment, expected_error)
     stdout, stderr, status = run_structure_verifier_with(fragment)
 
@@ -60,7 +82,7 @@ class DocsToolingTest < Minitest::Test
       assert_equal 28, text.scan(/^## 第 \d+ 章/u).length
 
       positions = [
-        "# AI Agent 产业级技术框架、任务执行与持续进化实践手册",
+        "# AI Agent 技术框架、任务执行与持续进化实践手册",
         "## 第一篇：站在 Agent 的视角，看一次任务怎样真正完成",
         "## 第 1 章",
         "## 第 28 章",
@@ -75,18 +97,106 @@ class DocsToolingTest < Minitest::Test
     end
   end
 
-  def test_full_verifier_counts_legacy_wording_in_all_site_copy
-    terms = %w[产业级 产业实践 产业现场 产业价值 产业案例 产业架构]
-    source_paths = Dir.glob(File.join(ROOT, "docs/**/*.{md,yml,html}"))
-    expected_count = source_paths.sum do |path|
-      text = File.read(path, encoding: "UTF-8")
-      terms.sum { |term| text.scan(term).length }
-    end
-
+  def test_full_verifier_accepts_complete_continuous_reference_coverage
     stdout, stderr, status = run_script("ruby", "scripts/verify-docs.rb")
 
-    refute status.success?, "legacy content should keep the full gate red during Task 1"
-    assert_includes [stdout, stderr].join("\n"), "Legacy industry wording: #{expected_count} occurrences"
+    assert status.success?, [stdout, stderr].reject(&:empty?).join("\n")
+    assert_match(/References: \d+ used, \d+ defined, 0 missing, 0 unused, 0 duplicate, 0 non-continuous/, stdout)
+    assert_includes stdout, "External URLs: 0 outside references"
+    assert_includes stdout, "Legacy industry wording: 0 occurrences"
+  end
+
+  def test_full_verifier_rejects_external_url_outside_references
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/guide/overview.md", "[unexpected source](https://example.com/source)")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "external URLs outside docs/references.md: 1 across 1 files"
+  end
+
+  def test_casual_reference_text_is_not_a_definition
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/guide/overview.md", "[R99]({{ '/references/#r99' | relative_url }})")
+      append_to_copied_file(directory, "docs/references.md", "R99 is mentioned here, but this prose is not a definition.")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "undefined body references: R99"
+  end
+
+  def test_full_verifier_rejects_non_site_safe_body_reference_syntax
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/guide/overview.md", "See [R01](#r01).")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "invalid body reference syntax in docs/guide/overview.md: R01"
+  end
+
+  def test_full_verifier_rejects_mismatched_body_reference_anchor
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/guide/overview.md", "[R01]({{ '/references/#r02' | relative_url }})")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "invalid body reference syntax in docs/guide/overview.md: R01"
+  end
+
+  def test_full_verifier_rejects_duplicate_reference_definition
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      path = File.join(directory, "docs/references.md")
+      text = File.read(path, encoding: "UTF-8")
+      heading = text.lines.find { |line| line.match?(/^### R\d{2,} · .+ \{#r\d{2,}\}\s*$/) }
+      append_to_copied_file(directory, "docs/references.md", heading || "### R01 · Duplicate {#r01}")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "duplicate reference definitions: 1"
+  end
+
+  def test_full_verifier_rejects_non_continuous_reference_ids
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      append_to_copied_file(directory, "docs/references.md", "### R99 · Gap {#r99}\n\n- Source: https://example.com/gap")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "non-continuous reference IDs"
+  end
+
+  def test_full_verifier_rejects_mismatched_definition_anchor
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      replace_in_copied_file(directory, "docs/references.md") do |text|
+        text.sub("{#r01}", "{#r02}")
+      end
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "invalid reference definition heading or anchor"
+  end
+
+  def test_full_verifier_rejects_malformed_definition_heading
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      replace_in_copied_file(directory, "docs/references.md") do |text|
+        text.sub("### R01 · Building Effective Agents {#r01}", "### R01 - Building Effective Agents {#r01}")
+      end
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "invalid reference definition heading or anchor"
+  end
+
+  def test_full_verifier_rejects_unused_reference_definition
+    stdout, stderr, status = run_full_verifier_with_mutations do |directory|
+      path = File.join(directory, "docs/references.md")
+      text = File.read(path, encoding: "UTF-8")
+      next_number = text.scan(/^### R(\d{2,})\b/).flatten.map(&:to_i).max.to_i + 1
+      id = format("R%02d", next_number)
+      append_to_copied_file(directory, "docs/references.md", "### #{id} · Unused {##{id.downcase}}\n\n- Source: https://example.com/unused")
+    end
+
+    refute status.success?, stdout
+    assert_includes stderr, "unused reference definitions:"
   end
 
   def test_structure_verifier_rejects_table_with_edge_pipes

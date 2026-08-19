@@ -15,6 +15,10 @@ PARTS = [
 ].freeze
 LEGACY_PATHS = %w[handbook _config.yml _data _layouts assets index.md 404.md scripts/split-handbook.sh].freeze
 INDUSTRY_TERMS = %w[产业级 产业实践 产业现场 产业价值 产业案例 产业架构].freeze
+EXTERNAL_URL_PATTERN = %r!https?://[^\s)>"']+!
+REFERENCE_HEADING_PATTERN = /^### (R\d{2,}) · (\S(?:.*\S)?) \{#(r\d{2,})\}\s*$/
+REFERENCE_HEADING_CANDIDATE_PATTERN = /^###\s+R\d{2,}\b.*$/
+BODY_REFERENCE_PATTERN = /\[(R\d{2,})\]\(\{\{ '\/references\/#(r\d{2,})' \| relative_url \}\}\)/
 
 def expected_pages
   pages = {
@@ -228,21 +232,79 @@ puts "Structure: #{chapter_count} chapters, #{part_count} parts, #{appendix_coun
 
 unless structure_only
   reference_page = pages.find { |page| page[:path] == "docs/references.md" }
-  reference_ids = reference_page ? reference_page[:body].scan(/\bR\d{2,}\b/).to_set : Set.new
-  body_reference_ids = pages.reject { |page| page[:path] == "docs/references.md" }
-                            .flat_map { |page| page[:body].scan(/\bR\d{2,}\b/) }.to_set
+  reference_body = reference_page ? reference_page[:body] : ""
+  definition_entries = []
+  invalid_definition_headings = []
+  reference_body.each_line do |line|
+    next unless line.match?(REFERENCE_HEADING_CANDIDATE_PATTERN)
+
+    match = line.match(REFERENCE_HEADING_PATTERN)
+    if match && match[1].downcase == match[3]
+      definition_entries << { id: match[1], anchor: match[3], heading: line.strip }
+    else
+      invalid_definition_headings << line.strip
+    end
+  end
+
+  unless invalid_definition_headings.empty?
+    errors << "invalid reference definition heading or anchor: #{invalid_definition_headings.join(' | ')}"
+  end
+
+  duplicate_groups = definition_entries.group_by { |entry| entry[:id] }.select { |_, entries| entries.length > 1 }
+  duplicate_count = duplicate_groups.values.sum { |entries| entries.length - 1 }
+  unless duplicate_groups.empty?
+    errors << "duplicate reference definitions: #{duplicate_count} (#{duplicate_groups.keys.sort.join(', ')})"
+  end
+
+  ordered_definition_ids = definition_entries.map { |entry| entry[:id] }
+  expected_definition_ids = (1..ordered_definition_ids.length).map { |number| format("R%02d", number) }
+  non_continuous_count = ordered_definition_ids.each_index.count do |index|
+    ordered_definition_ids[index] != expected_definition_ids[index]
+  end
+  if non_continuous_count.positive?
+    errors << "non-continuous reference IDs: expected #{expected_definition_ids.join(', ')}, got #{ordered_definition_ids.join(', ')}"
+  end
+
+  reference_ids = ordered_definition_ids.to_set
+  body_reference_ids = Set.new
+  pages.reject { |page| page[:path] == "docs/references.md" }.each do |page|
+    scrubbed = page[:body].gsub(BODY_REFERENCE_PATTERN) do |citation|
+      id = Regexp.last_match(1)
+      anchor = Regexp.last_match(2)
+      if id.downcase == anchor
+        body_reference_ids << id
+        " " * citation.length
+      else
+        citation
+      end
+    end
+    invalid_ids = scrubbed.scan(/\bR\d{2,}\b/).uniq.sort
+    errors << "invalid body reference syntax in #{page[:path]}: #{invalid_ids.join(', ')}" unless invalid_ids.empty?
+  end
+
   missing_references = body_reference_ids - reference_ids
   unused_references = reference_ids - body_reference_ids
-  errors << "undefined references: #{missing_references.to_a.sort.join(', ')}" unless missing_references.empty?
-  warnings << "unreferenced entries: #{unused_references.length}" unless unused_references.empty?
+  errors << "undefined body references: #{missing_references.to_a.sort.join(', ')}" unless missing_references.empty?
+  errors << "unused reference definitions: #{unused_references.to_a.sort.join(', ')}" unless unused_references.empty?
 
-  url_counts = pages.each_with_object({}) do |page, result|
-    count = page[:body].scan(%r!https?://[^\s)>"']+!).length
-    result[page[:path]] = count if count.positive?
+  definition_entries.each do |entry|
+    start_index = reference_body.index(entry[:heading])
+    next unless start_index
+
+    remaining = reference_body[(start_index + entry[:heading].length)..-1].to_s
+    section = remaining.split(/^###\s+/, 2).first.to_s
+    errors << "reference definition has no external URL: #{entry[:id]}" unless section.match?(EXTERNAL_URL_PATTERN)
   end
-  body_url_counts = url_counts.reject { |path, _| path == "docs/references.md" }
+
+  markdown_url_counts = actual_paths.each_with_object({}) do |relative, result|
+    count = File.read(File.join(ROOT, relative), encoding: "UTF-8").scan(EXTERNAL_URL_PATTERN).length
+    result[relative] = count if count.positive?
+  end
+  body_url_counts = markdown_url_counts.reject { |path, _| path == "docs/references.md" }
   body_url_total = body_url_counts.values.sum
-  reference_url_total = url_counts.fetch("docs/references.md", 0)
+  reference_urls = reference_body.scan(EXTERNAL_URL_PATTERN)
+  reference_url_total = reference_urls.length
+  reference_unique_url_total = reference_urls.to_set.length
   errors << "external URLs outside docs/references.md: #{body_url_total} across #{body_url_counts.length} files" if body_url_total.positive?
 
   site_copy_paths = Dir.glob(File.join(DOCS, "**", "*.{md,yml,html}"))
@@ -253,8 +315,8 @@ unless structure_only
   total_terms = term_counts.values.sum
   errors << "legacy industry wording: #{total_terms} occurrences (#{term_counts.map { |term, count| "#{term}=#{count}" }.join(', ')})" if total_terms.positive?
 
-  puts "References: #{body_reference_ids.length} used IDs, #{reference_ids.length} defined IDs"
-  puts "External URLs: #{reference_url_total} in references, #{body_url_total} outside references across #{body_url_counts.length} files"
+  puts "References: #{body_reference_ids.length} used, #{reference_ids.length} defined, #{missing_references.length} missing, #{unused_references.length} unused, #{duplicate_count} duplicate, #{non_continuous_count} non-continuous"
+  puts "External URLs: #{body_url_total} outside references across #{body_url_counts.length} files; #{reference_url_total} in references (#{reference_unique_url_total} unique)"
   puts "Legacy industry wording: #{total_terms} occurrences"
 else
   puts "Content gates skipped (--structure-only)"

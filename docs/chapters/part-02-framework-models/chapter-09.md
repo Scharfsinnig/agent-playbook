@@ -1,13 +1,13 @@
 ---
 layout: default
-title: 第 9 章　产业级 Agent 参考架构：控制面、执行面、数据面与学习面
+title: 第 9 章　Agent 参考架构：控制面、执行面、数据面与学习面
 permalink: /chapters/part-02-framework-models/chapter-09/
 part_home: /chapters/part-02-framework-models/
 previous_page: /chapters/part-02-framework-models/
 next_page: /chapters/part-02-framework-models/chapter-10/
 ---
 
-# 第 9 章　产业级 Agent 参考架构：控制面、执行面、数据面与学习面
+# 第 9 章　Agent 参考架构：控制面、执行面、数据面与学习面
 
 ## 9.1 架构首先要分离改变频率与信任等级
 
@@ -19,17 +19,17 @@ next_page: /chapters/part-02-framework-models/chapter-10/
 
 请求首先经过身份与任务登记服务，创建不可变的 `run_id` 和契约版本。策略服务基于主体、目的、租户、数据分类和动作风险给出可执行的 capability。编排器建立检查点，调用上下文服务取得经过 ACL、时效与来源过滤的材料，再调用模型网关产生结构化候选。候选进入策略门和工具网关；工具网关记录意图、幂等键和 trace context，派发给内部 API、沙箱或异步队列。回执与回调进入事件日志，reducer 更新状态，验证器检查局部和最终谓词，观测服务将版本、成本、延迟、错误和证据连接为一个 root trace。
 
-这条链路没有要求使用某个框架。Temporal 以持久事件历史和确定性重放支撑长时 workflow，要求将外部副作用放在 Activity；其 Activity 可重试，因而业务代码需要幂等。[Temporal SDK Architecture](https://github.com/temporalio/documentation/blob/main/docs/encyclopedia/architecture/temporal-sdks.mdx) LangGraph 提供 checkpoint、interrupt 和持久状态能力，但其节点在 interrupt 后会从节点开头重跑，故中断前的副作用同样必须幂等。[LangGraph Interrupts](https://langchain-ai.github.io/langgraph/how-tos/human_in_the_loop/breakpoints/) 选择框架时应问“是否满足恢复、版本、审计和事务语义”，而不是只比较提示 API 的便利程度。
+这条链路没有要求使用某个框架。持久 workflow 可以把决策放入可重放历史、把外部副作用放入可重试的 Activity，因而业务代码仍需幂等。[R07]({{ '/references/#r07' | relative_url }}) 状态图框架可以提供 checkpoint、interrupt 和持久状态，但某些中断会从节点起点恢复，中断前的副作用同样必须幂等。[R05]({{ '/references/#r05' | relative_url }}) 选择框架时应问“是否满足恢复、版本、审计和事务语义”，而不是只比较提示 API 的便利程度。
 
 ## 9.3 检查点、事件溯源与重放的边界
 
-检查点是恢复执行位置的机制，不是外部世界的快照，更不是 exactly-once 保证。应把已知的模型结果、工具回执、审批和状态迁移写为事件；恢复时工作流重建这些已知事实，不再重新向模型提同一个问题。模型调用、随机数、时钟和外部 API 均是非确定输入，要么被记录为 Activity 结果，要么在重放时由受控接口提供相同历史值。Temporal 文档明确强调 workflow 代码必须可确定性重放，而 LLM 调用应位于 Activity 中。[Temporal AI FAQ](https://go.temporal.io/platform-hub/faqs)
+检查点是恢复执行位置的机制，不是外部世界的快照，更不是 exactly-once 保证。应把已知的模型结果、工具回执、审批和状态迁移写为事件；恢复时工作流重建这些已知事实，不再重新向模型提同一个问题。模型调用、随机数、时钟和外部 API 均是非确定输入，要么被记录为 Activity 结果，要么在重放时由受控接口提供相同历史值；LLM 调用也应越过确定性边界成为被记录的 Activity 结果。[R07]({{ '/references/#r07' | relative_url }})
 
 事件溯源也有成本：历史会增长、schema 会演进、敏感内容需要最小化保存和访问控制。实践中可保存参数哈希、加密引用或结构化摘要，而不是默认保留所有原始 Prompt 与推理文本；但不能丢失恢复、幂等和审计需要的最小证据。历史 run 的代码升级应采用 run 级版本 pin、兼容分支或显式迁移器，并在发布前用 replay corpus 验证。若一个用例短、只读、可丢弃，完整 durable engine 未必有性价比；若涉及跨小时等待、审批、外部写入或高价值审计，它通常值得。
 
 ## 9.4 可观测性和操作控制
 
-每个 root trace 至少关联任务契约、身份/租户、模型和提示版本、检索来源、候选动作、工具参数摘要、授权决定、幂等键、回执、验证结论、成本、延迟和终态。OpenTelemetry 的 GenAI 语义约定覆盖模型、token、消息、检索和工具调用等字段，但这些字段可能含敏感内容，且规范仍在演进；组织应通过内部版本化适配层实施脱敏、采样和访问控制，把实际采用的 tag 或 commit 及相应 `schema_url` 写入发布清单，并在语义版本升级时验证旧、新字段映射和查询兼容，而不要默认记录完整内容。[OpenTelemetry GenAI semantic conventions 仓库](https://github.com/open-telemetry/semantic-conventions-genai)
+每个 root trace 至少关联任务契约、身份/租户、模型和提示版本、检索来源、候选动作、工具参数摘要、授权决定、幂等键、回执、验证结论、成本、延迟和终态。跨框架实施可以从 OpenTelemetry GenAI 字段起步，但其中可能包含敏感内容，且规范仍在演进。[R56]({{ '/references/#r56' | relative_url }}) 组织应通过内部版本化适配层实施脱敏、采样和访问控制，把实际采用的 tag 或 commit 及相应 `schema_url` 写入发布清单，并在语义版本升级时验证旧、新字段映射和查询兼容，而不要默认记录完整内容。
 
 操作控制应至少有五个独立层次：停用某个 feature/工具/租户；策略拒绝某类动作；吊销凭证；回退一组模型、提示、工具与索引版本；以及全局 kill，将系统切换到只读或人工流程。它们必须在模型和主供应商不可用时仍可操作，并定期演练。事故发生后的顺序是缩小影响、吊销能力、封存证据、隔离重放、回退已知良好版本、补充回归集和有限发布，而不是先让模型总结一段事故报告。
 
@@ -47,32 +47,32 @@ next_page: /chapters/part-02-framework-models/chapter-10/
 
 ## 9.7 模型与工具 SDK
 
-**解决什么。** 这一层处理模型调用、函数工具、结构化输出、局部 guardrail 与运行 trace，让一个业务动作可以在较少样板代码中完成。**实例。** [OpenAI Agents SDK／Agents 指南](https://developers.openai.com/api/docs/guides/agents)与各模型提供商 SDK 都可作为这一层的实例。**不自动解决什么。** SDK 的 loop、session 或 trace 不等于业务事务、跨服务幂等、组织级授权或跨进程的长期恢复；这些语义仍应放在应用控制面、工具网关和耐久运行时中。
+**解决什么。** 这一层处理模型调用、函数工具、结构化输出、局部 guardrail 与运行 trace，让一个业务动作可以在较少样板代码中完成。**实例。** Agents SDK 和各模型提供商 SDK 都可作为这一层的实现参考。[R13]({{ '/references/#r13' | relative_url }}) **不自动解决什么。** SDK 的 loop、session 或 trace 不等于业务事务、跨服务幂等、组织级授权或跨进程的长期恢复；这些语义仍应放在应用控制面、工具网关和耐久运行时中。
 
 ## 9.8 状态图或代码编排
 
-**解决什么。** 这一层表达条件分支、循环、并行、节点状态与局部人机中断，适合把一次 Agent 决策过程写成可审阅的控制流。**实例。** [LangGraph](https://docs.langchain.com/oss/python/langgraph/overview)、[Google ADK workflows](https://github.com/google/adk-docs/blob/main/docs/workflows/index.md)与 [CrewAI Flows](https://docs.crewai.com/index)可作为不同风格的实例。**不自动解决什么。** 图能表达顺序不等于外部系统获得原子性；业务政策正确性、跨租户权限边界、可靠消息投递和跨部署恢复仍需要独立设计。
+**解决什么。** 这一层表达条件分支、循环、并行、节点状态与局部人机中断，适合把一次 Agent 决策过程写成可审阅的控制流。**实例。** LangGraph、Google ADK workflows 与 CrewAI Flows 代表不同的控制流组织方式。[R05]({{ '/references/#r05' | relative_url }})[R15]({{ '/references/#r15' | relative_url }})[R16]({{ '/references/#r16' | relative_url }}) **不自动解决什么。** 图能表达顺序不等于外部系统获得原子性；业务政策正确性、跨租户权限边界、可靠消息投递和跨部署恢复仍需要独立设计。
 
 ## 9.9 持久工作流
 
-**解决什么。** 此层以事件历史、确定性重放、长等待、Activity 重试与恢复来管理长生命周期业务，使进程崩溃或部署切换后仍可继续同一 run。**实例。** [Temporal Workflows](https://docs.temporal.io/workflows)是典型实例。**不自动解决什么。** 工作流引擎不会让 LLM 的判断变得真实可靠；每个 Activity 的副作用依旧需要应用自行提供幂等键、鉴权、超时、补偿与对账。
+**解决什么。** 此层以事件历史、确定性重放、长等待、Activity 重试与恢复来管理长生命周期业务，使进程崩溃或部署切换后仍可继续同一 run。**实例。** Temporal Workflows 是一种持久工作流实现。[R07]({{ '/references/#r07' | relative_url }}) **不自动解决什么。** 工作流引擎不会让 LLM 的判断变得真实可靠；每个 Activity 的副作用依旧需要应用自行提供幂等键、鉴权、超时、补偿与对账。
 
 ## 9.10 协议互操作
 
-**解决什么。** 协议层让工具、资源和提示等能力能够在客户端与服务端之间被发现和调用，降低集成时的接口摩擦。**实例。** [MCP 2026-07-28 正式规范发布说明](https://blog.modelcontextprotocol.io/posts/2026-07-28/)是这一层的代表。**不自动解决什么。** MCP 是互操作协议，不是应用 run 状态库、业务授权系统、任务事务管理器或可靠队列；兼容旧会话式实现时，还必须专门验证 stateless core 与 Tasks extension 的迁移语义。
+**解决什么。** 协议层让工具、资源和提示等能力能够在客户端与服务端之间被发现和调用，降低集成时的接口摩擦。**实例。** MCP 是一种工具与资源互操作协议。[R06]({{ '/references/#r06' | relative_url }}) **不自动解决什么。** MCP 不是应用 run 状态库、业务授权系统、任务事务管理器或可靠队列；兼容旧会话式实现时，还必须专门验证 stateless core 与 Tasks extension 的迁移语义。
 
 ## 9.11 多 Agent 协作
 
-**解决什么。** 此层提供角色、分工、handoff、群组终止以及共享或传递消息的协作抽象。**实例。** [AutoGen Teams](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/teams.html)、[CrewAI](https://docs.crewai.com/index)、[Google ADK](https://developers.googleblog.com/agent-development-kit-easy-to-build-multi-agent-applications/)和 [OpenAI Agents orchestration](https://developers.openai.com/api/docs/guides/agents/orchestration)均可作为能力实例。**不自动解决什么。** 多角色不会自然生成独立证据、信用因果、死锁消除或统一提交权；高风险写入仍要交回一个受策略约束的主控者。
+**解决什么。** 此层提供角色、分工、handoff、群组终止以及共享或传递消息的协作抽象。**实例。** AutoGen、CrewAI、Google ADK 和 OpenAI Agents 提供了不同的团队与交接机制。[R14]({{ '/references/#r14' | relative_url }})[R16]({{ '/references/#r16' | relative_url }})[R15]({{ '/references/#r15' | relative_url }})[R13]({{ '/references/#r13' | relative_url }}) **不自动解决什么。** 多角色不会自然生成独立证据、信用因果、死锁消除或统一提交权；高风险写入仍要交回一个受策略约束的主控者。
 
 ## 9.12 评测与观测
 
-**解决什么。** 此层采集 trace，检查轨迹，做回归，并比较模型、工具、成本和发布版本，为运行改进提供证据。**实例。** [OpenTelemetry GenAI 语义约定仓库](https://github.com/open-telemetry/semantic-conventions-genai)以及 SDK 或平台的 trace/eval 能力均可采用；由于该约定仍处于 Development 和迁移状态，生产系统应 pin 具体 tag 或 commit、`schema_url` 与字段映射，升级时对旧、新 schema 做映射或阶段性双写并回放验收。**不自动解决什么。** 有 trace 不代表任务契约高质量，也不替代风险接受、安全决策和人工最终责任。
+**解决什么。** 此层采集 trace，检查轨迹，做回归，并比较模型、工具、成本和发布版本，为运行改进提供证据。**实例。** 可以从 OpenTelemetry GenAI 语义约定与 SDK 或平台的 trace/eval 能力起步；由于该约定仍处于 Development 和迁移状态，生产系统应 pin 具体 tag 或 commit、`schema_url` 与字段映射，升级时对旧、新 schema 做映射或阶段性双写并回放验收。[R56]({{ '/references/#r56' | relative_url }}) **不自动解决什么。** 有 trace 不代表任务契约高质量，也不替代风险接受、安全决策和人工最终责任。
 
 ## 9.13 组合使用、能力边界与锁定风险
 
 以上实例不是同类产品的排名。以 LangGraph 为例，它把图、持久化和 interrupt 作为 Agent 编排能力，适合需要显式状态与人机中断的应用；以 Temporal 为例，它把工作流的事件历史与重放作为耐久执行核心，适合跨长等待、重试和故障恢复的业务编排。二者都能出现在同一系统中，例如用状态图表达一段 Agent 决策，用 durable workflow 管理该段决策的长期生命周期；也可以只选其一，前提是补齐未覆盖的语义。不能因为某个工具有“memory”或“persistence”字段，就假定它满足交易级恢复需求。
 
-AutoGen、CrewAI、Google ADK 和 OpenAI Agents SDK 则更接近开发 Agent 或协作模式的应用层抽象，但侧重点并不相同。AutoGen 提供团队、selector、handoff 和终止条件；CrewAI 将 crews 与可管理状态/持久化的 flows 区分；Google ADK 同时提供确定性 workflow agents 与 LLM 驱动的 transfer；OpenAI Agents SDK 提供 agents-as-tools、handoff、sessions、guardrails 和 tracing，并明确代码编排与 LLM 编排可以混用。[AutoGen Teams](https://microsoft.github.io/autogen/stable/user-guide/agentchat-user-guide/tutorial/teams.html) [CrewAI Docs](https://docs.crewai.com/index) [Google ADK](https://developers.googleblog.com/agent-development-kit-easy-to-build-multi-agent-applications/) [OpenAI Agents orchestration 指南](https://developers.openai.com/api/docs/guides/agents/orchestration) 这些能力可缩短应用开发，但生产系统仍应把工具授权、业务状态、事务回执、审计证据和最终 verifier 放在可替换的外层服务中。
+AutoGen、CrewAI、Google ADK 和 OpenAI Agents SDK 都提供 Agent 或协作模式的应用层抽象，但侧重点不同：有的重点是团队、selector、handoff 和终止条件，有的区分 crews 与持久 flow，也有的同时支持确定性 workflow、模型驱动 transfer、agents-as-tools 和 handoff。[R14]({{ '/references/#r14' | relative_url }})[R16]({{ '/references/#r16' | relative_url }})[R15]({{ '/references/#r15' | relative_url }})[R13]({{ '/references/#r13' | relative_url }}) 这些能力可缩短应用开发，但生产系统仍应把工具授权、业务状态、事务回执、审计证据和最终 verifier 放在可替换的外层服务中。
 
 锁定风险也应按层处理。模型调用用 provider adapter 与标准化请求/响应记录隔离；工具用版本化 manifest 和契约测试隔离；事件使用组织自有 schema、稳定 correlation ID 和可导出存储隔离；评测用例、rubric 和红队资产不绑在某个 trace UI；MCP adapter 维护版本协商与迁移测试。对于快速演进的 SDK、协议和 OpenTelemetry GenAI 约定，发布时固定依赖版本、采集 schema、`schema_url` 与 adapter 行为，并在升级前做 replay、工具兼容、权限、成本和观测回归。尤其 OpenTelemetry GenAI 约定仍有迁移/Development 性质，应以内部 pin 的语义版本实施；旧、新 schema 的映射、阶段性双写和查询兼容都要有验收证据，而不能宣称它已是永久稳定的强制标准。

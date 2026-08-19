@@ -34,7 +34,7 @@ parts:
     url: /chapters/part-02-framework-models/
     chapters:
       - number: 9
-        title: "第 9 章　产业级 Agent 参考架构：控制面、执行面、数据面与学习面"
+        title: "第 9 章　Agent 参考架构：控制面、执行面、数据面与学习面"
         url: /chapters/part-02-framework-models/chapter-09/
       - number: 10
         title: "第 10 章　Workflow、单 Agent 与多 Agent 的选择边界"
@@ -84,7 +84,7 @@ parts:
       - number: 23
         title: "第 23 章　组织、合规与责任：把治理做成系统接口"
         url: /chapters/part-04-production-governance/chapter-23/
-  - title: "第五篇：用完整案例和建设路线把方法落到产业现场"
+  - title: "第五篇：用完整案例和建设路线把方法落到实际任务"
     url: /chapters/part-05-cases-roadmap/
     chapters:
       - number: 24
@@ -100,7 +100,7 @@ parts:
         title: "第 27 章　90 天落地路线与十二个月成熟度建设"
         url: /chapters/part-05-cases-roadmap/chapter-27/
       - number: 28
-        title: "第 28 章　产业架构评审方法：用闭环定位系统缺口"
+        title: "第 28 章　架构评审方法：用闭环定位系统缺口"
         url: /chapters/part-05-cases-roadmap/chapter-28/
 
 conclusion:
@@ -119,5 +119,5 @@ appendices:
       url: /appendices/appendix-c/
 
 references:
-  title: "附录 D：一手资料与继续研究入口"
+  title: "附录 D：统一参考资料"
   url: /references/

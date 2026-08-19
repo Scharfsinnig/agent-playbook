@@ -35,6 +35,6 @@ next_page: /chapters/part-01-runtime/chapter-08/
 
 ## 7.5 指标和边界
 
-应报告验证覆盖率、false-success 与 false-failure、模型自评与外部 verdict 的校准误差、无进展循环率、STOP/ASK_HUMAN 的 precision/recall、预算熔断前得到可行动终态的比例以及人工交接后的解决率。安全高后果不变量通常需要发布测试集内零违规；它不能被一个平均成功率抵消。评测既应检查最终交付，也应检查过程是否遵守工具、权限和证据约束；这正是 Agent eval 与只评最终文本的差别。[Anthropic：Demystifying evals for AI agents](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents)
+应报告验证覆盖率、false-success 与 false-failure、模型自评与外部 verdict 的校准误差、无进展循环率、STOP/ASK_HUMAN 的 precision/recall、预算熔断前得到可行动终态的比例以及人工交接后的解决率。安全高后果不变量通常需要发布测试集内零违规；它不能被一个平均成功率抵消。评测既应检查最终交付，也应检查过程是否遵守工具、权限和证据约束，因此需要分开任务定义、试跑、轨迹、评分器与环境结果。[R10]({{ '/references/#r10' | relative_url }})
 
 验证也有成本。对低价值草稿不必让每一句话都经过多模型陪审；应按主张后果、可逆性和来源可靠性分层。对无法形式化的创意任务，可以让用户验收成为完成谓词，但仍要保留预算、权限、数据边界与终态。第八章进一步讨论由人和多个 Agent 共同承担这些不确定点时，如何避免把协作变成新的失控来源。

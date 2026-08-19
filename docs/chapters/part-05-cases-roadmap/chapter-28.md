@@ -1,13 +1,13 @@
 ---
 layout: default
-title: 第 28 章　产业架构评审方法：用闭环定位系统缺口
+title: 第 28 章　架构评审方法：用闭环定位系统缺口
 permalink: /chapters/part-05-cases-roadmap/chapter-28/
 part_home: /chapters/part-05-cases-roadmap/
 previous_page: /chapters/part-05-cases-roadmap/chapter-27/
 next_page: /guide/conclusion/
 ---
 
-# 第 28 章　产业架构评审方法：用闭环定位系统缺口
+# 第 28 章　架构评审方法：用闭环定位系统缺口
 
 架构评审不是给“Agent 成熟度”打一个平均分。应从一条真实任务开始，沿十三步逐一问：入口是否识别主体与用途；契约是否可验收；风险是否把动作分级；状态是否能恢复；上下文是否有来源、时效和 ACL；计划是否把确定性流程同模型判断分开；候选动作是否被预算和策略过滤；写入是否绑定身份、审批、幂等和补偿；环境回执是否被独立验证；失败后状态是否有合法去处；交付是否诚实呈现未决项；经验是否经过学习门。
 
