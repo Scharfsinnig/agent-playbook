@@ -28,7 +28,7 @@ parts:
         title: "第 7 章　验证、纠错和停止：如何避免幻觉、漂移与无限循环"
         url: /chapters/part-01-runtime/chapter-07/
       - number: 8
-        title: "第 8 章　人在回路与多 Agent：何时协同，怎样交接与仲裁"
+        title: "第 8 章　人在回路与可恢复的多智能体协作：怎样交接、仲裁与收敛"
         url: /chapters/part-01-runtime/chapter-08/
   - title: "第二篇：框架与模型如何共同支撑这条执行链"
     url: /chapters/part-02-framework-models/

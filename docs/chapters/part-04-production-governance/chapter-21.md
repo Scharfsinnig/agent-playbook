@@ -30,3 +30,13 @@ Replay 的目标是复原决策和故障，不是再次执行生产动作。低�
 SLO 也应面向安全有效终态，而不是 HTTP 2xx。可定义有效任务成功率、正确允许/拒绝高风险动作比例、获得成功/明确降级/可行动人工接管的终态可用性、无重复副作用的恢复率、可重放覆盖率、质量漂移和每个安全验收任务的效率。阈值由后果、历史基线和错误预算共同决定；安全不变量不是平均可用性。错误预算耗尽时，冻结高风险发布、缩小权限或流量，并优先修复失败簇。
 
 停止能力需要独立于模型和供应商。K1 feature flag 停单一租户/工具；K2 policy deny 阻断一类动作；K3 credential revoke 吊销能力；K4 release rollback 回到一致的已批准制品组合；K5 global kill 停 worker、冻结队列并转人工或只读。事故发生时先检测与分级，缩小 blast radius，撤销凭证，封存证据，在隔离环境重放，回滚已知良好版本，修复并补入回归/红队集，然后有限 canary 与复盘。每层停止都要定期演练，且不能要求 Agent 自己理解“请停止”。
+
+## 21.4 团队状态与 WorkState 继承同一组可靠性语义
+
+多智能体协作中的 TeamState 和 WorkState 不是例外的数据结构，它们同样由追加事件和确定性 reducer 生成。`work_unit_created`、`lease_granted`、`checkpointed`、`artifact_submitted`、`verification_failed`、`proposal_merged` 与 `cancel_requested` 等事件都要有唯一 ID、因果版本和幂等键。消息重复投递时，reducer 只能应用一次；投影损坏时，应从快照与后续事件重建，而不是要求各 worker 回忆自己的聊天历史。
+
+lease 是暂时处理权，不是完成权。每次重新分配产生更高 fencing token，旧 worker 的迟到 checkpoint、回执或提交只能作为待对账证据，不能覆盖当前 WorkState。对可能已发生的外部副作用，恢复者先依据业务幂等键和权威查询确认世界状态，再决定接受、补偿或重派；“worker 已超时”本身不是可以安全重做写操作的证据。
+
+团队重放必须冻结或版本化 Team Contract、WorkGraph、reducer、completion predicate、租约事件和 artifact 引用。重放用于恢复投影和解释决策，不能再次向生产目标发送 worker 原先的写操作。重放发现某个输入制品已失效时，只使依赖它的子图进入 `needs_replan`，而不是丢弃所有已验证分支。
+
+取消与 kill 也必须进入持久状态。取消事件携带单调递增的取消代次，停止新派发，使未终结 WorkState 转入取消流程，并要求 worker 在下一个安全点保存诊断、撤销短期能力、报告未知副作用；仅发送一条取消消息不能证明传播完成。更高等级的 kill 会同时冻结队列、吊销凭证和阻止合并，但已经越过不可逆点的动作仍需对账或补偿。只有当 reducer 证明取消已经覆盖目标子图、未决写入已处理且必要制品已保留，控制面才能清理资源或报告团队终态。

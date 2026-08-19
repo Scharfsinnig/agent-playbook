@@ -126,3 +126,72 @@ next_page: /references/
 使用离线策略评估时，除估计收益外必须报告行为策略重叠、有效样本量和置信区间。新策略选择了日志中从未出现的动作时，重要性加权无法凭空创造证据；这部分必须进入沙箱、shadow 或受限 canary，而不能用离线分数直接放行。
 
 持续学习还应跟踪遗忘矩阵：按能力、用户群、时间、语言和风险切片比较新旧版本。所谓“安全违规为零”只能表示在明确攻击集、样本量和时间窗口内没有观察到违规，需要同时给出覆盖范围和统计上界。
+
+## C.16 团队契约 Team Contract
+
+Team Contract 是 Task Contract 在多智能体执行中的受限展开，不能放宽父契约的权限、预算、期限或禁止动作。建议至少包含以下字段。
+
+- `team_contract_id`、`task_contract_id` 与 `version` 关联团队契约、父任务契约和每次有效变更。
+- `topology`、`members` 与 `roles` 描述已经选定的协作结构、成员身份、职责和替补关系；角色名称不自动授予能力。
+- `delegation_rules`、`capability_ceiling` 与 `member_capabilities` 证明子能力是父任务能力的真子集或相等受限集，并记录谁可创建、取消或重派 WorkUnit。
+- `shared_artifact_policy`、`message_policy` 与 `visibility_scope` 规定可以共享哪些版本化制品、哪些消息能转成事件，以及每个成员可见的数据范围。
+- `verification_authority`、`merge_authority` 与 `completion_predicate_version` 标明谁能验证、谁能提交共享真相，以及团队完成判定使用哪个版本。
+- `team_budget`、`deadline`、`retry_policy`、`handoff_policy`、`cancel_policy` 与 `cleanup_policy` 规定总成本、期限、重试/交接上限、取消传播和资源保留。
+- `controller_id`、`controller_lease` 与 `failover_owner` 记录当前控制器、其租约和故障接管责任。
+
+## C.17 工作图与工作单元 WorkGraph / WorkUnit
+
+WorkGraph 表示逻辑依赖，不表示文件工作区。只有严格层级分解才可另称 WorkTree。WorkGraph 至少包含 `work_graph_id`、`team_contract_version`、图版本、节点和边集合、汇合规则、wait-for graph、失效传播规则、取消代次、创建者、创建时间和 superseded 版本。
+
+每个 WorkUnit 建议包含：
+
+- `work_unit_id`、`parent_ids`、`dependency_ids` 与 `affected_subgraph`，用于定位依赖、重规划和取消传播范围。
+- `objective`、`input_artifact_refs`、`input_snapshot_version`、`deliverable_schema` 与 `local_completion_predicates`，用于证明该单元可以独立验收。
+- `allowed_tools`、`data_scope`、`allowed_write_set`、`risk_level` 与 `capability_token_ref`，用于门控局部能力。
+- `budget`、`deadline`、`priority`、`max_attempts`、`fallback` 与 `escalation_owner`，用于限制重试、交接和成本。
+- `work_state_id`、`owner`、`lease_id`、`artifact_refs`、`merge_proposal_ids` 与 `conflict_case_ids`，用于关联执行和结果。
+
+## C.18 团队/群组状态 Team/Swarm State 与 reducer
+
+同一对象可以按实现命名为 TeamState 或 SwarmState，但名称不表示系统必然属于经典群体智能。它是事件流的可恢复投影，至少包含 `team_id`、`team_contract_version`、`work_graph_version`、各 WorkUnit 的状态索引、当前控制器及其 fencing token、共享 artifact 引用、未决 Merge Proposal、Conflict Case、预算余额、deadline、取消代次、完成谓词版本与评估结果、最近事件序号、快照版本和终态。
+
+team reducer 的发布对象应记录 `reducer_version`、可接受事件类型、每类事件的幂等键、状态转换前置条件、冲突处理、投影 schema、迁移版本和重放测试摘要。team completion predicate 应记录 `predicate_version`、必要 WorkUnit 集、必要 artifact/业务回执、允许的部分完成条件、未决冲突规则、取消和失败的终态映射以及最近验证时间。worker 的自然语言自报不得直接修改这两个对象。
+
+## C.19 可恢复工作状态 WorkState
+
+WorkState 是本手册定义的可恢复工作单元状态，不声称是跨框架标准。建议字段包括 `work_state_id`、`work_unit_id`、`state`、`state_version`、`team_contract_version`、`input_snapshot`、`owner`、`attempt`、`lease_id`、`fencing_token`、`last_heartbeat`、`checkpoint_refs`、`artifact_refs`、`command_or_tool_receipts`、`budget_consumed`、`blocked_reason`、`failure_signature`、`cancel_generation`、`recovery_point`、`cleanup_deadline` 和 `last_event_id`。
+
+主状态按 `queued → leased → running → submitted → verifying → merged → done` 推进。侧状态至少包括 `blocked`、`retryable_failed`、`needs_replan`、`escalated`、`cancelled` 和 `expired`。每个转换要定义允许的前态、授权 actor、所需事件和证据、幂等规则及副作用；例如只有验证/合并服务能从 `verifying` 推进到 `merged`，worker 不能直接写 `done`。
+
+代码 WorkState 还应增加 `repo_id`、`baseline_commit`、`worktree_id`、规范化 worktree 路径、唯一分支、目标分支、允许路径、环境或容器 digest、文件变更摘要、候选 commit、测试回执和 quarantine 状态。这些字段支持第 26 章的 Git worktree 创建、恢复、验证与清理流程。
+
+## C.20 制品与协作事件 Artifact / Message / Event
+
+Artifact 至少包含 `artifact_id`、`artifact_type`、`content_digest`、`storage_ref`、`schema_version`、`producer`、`work_unit_id`、`team_contract_version`、`input_refs`、`provenance`、`created_at`、`scope`、`verification_status` 和 `supersedes`。内容变化必须产生新 ID 或版本，不能原地覆盖已经被下游消费的制品。
+
+Message 可包含 `message_id`、sender、recipient、conversation/subject、payload ref、发送时间和 TTL，但它默认只是通知。只有授权入口把它转换成 Event 后才可驱动状态。Event 至少包含 `event_id`、`event_type`、`aggregate_id`、`causal_parent_ids`、`idempotency_key`、`actor`、`contract_version`、`fencing_token`、payload/artifact refs、发生时间、接收时间和事件序号。取消、完成、租约与合并必须以 Event 表示，不能只存在于聊天文本。
+
+## C.21 租约 Lease
+
+Lease 建议包含 `lease_id`、`work_unit_id`、`owner`、`issued_at`、`expires_at`、`heartbeat_interval`、`last_heartbeat`、`fencing_token`、`capability_refs`、`max_renewals`、`renewal_count`、`revoked_at`、`revoke_reason` 与 `superseded_by`。fencing token 在重新分配时单调递增，持久层拒绝低于当前 token 的 checkpoint、提交或状态写入。
+
+过期并不证明外部动作没有发生。租约对象还应关联待对账的幂等键、业务事务 ID、最后持久检查点和迟到回执。旧 owner 的结果可以进入诊断或新的 Merge Proposal，但必须重新验证，不能按最后到达者覆盖当前结果。
+
+## C.22 合并提案与冲突案件 Merge Proposal / Conflict Case
+
+Merge Proposal 至少包含 `proposal_id`、`work_unit_id`、作者与 fencing token、`target_ref`、`target_version`、输入和候选 artifact、change digest、依赖与前置条件、允许写集、验证/测试回执、风险、回滚方式、契约版本、创建时间、状态、verifier 和最终 merge receipt。`submitted`、`verified` 与 `merged` 必须是不同状态；存在 commit 或获得高评分都不等于已集成。
+
+Conflict Case 至少包含 `conflict_case_id`、涉及的 proposal/artifact/claim、冲突类型、冲突字段或写集、各方证据与版本、受影响 WorkUnit/子图、检测事件、冻结范围、可用确定性规则、仲裁 owner、deadline、决定、理由、采用和拒绝的 artifact、后续重规划以及关闭时间。没有确定性规则时，简单多数或最后一个 Agent 的意见不能关闭冲突。
+
+## C.23 团队协作指标
+
+团队指标必须与相同任务分布、权限和验证口径下的强单 Agent 基线比较，并按拓扑、难度、风险和故障类型切片。最低指标集包括：
+
+- 结果指标报告经验证成功率、错误完成率、单位安全验收任务成本和端到端 P95。
+- 协调指标报告通信 token/总 token、协调等待延迟、重复 WorkUnit 率和 Merge Proposal 冲突率。
+- 所有权指标报告 orphan task 率、未归属 artifact 率、lease 过期率、重新分配率和迟到结果率。
+- 停止与恢复指标报告取消传播覆盖率/时间、故障恢复时间、控制器 failover 时间、补偿完成率和遗留未知副作用数。
+- 证据指标报告独立证据比例、相关错误率、盲复核覆盖率以及需要人工仲裁的 Conflict Case 比例。
+- 人机指标报告接管率、handoff packet 理解时间、人工返工量、人工修改后的接受率和合并后回滚率。
+
+这些指标需要同时记录分母、观察窗口、样本量和版本。多个成员结论一致而来源相同，不应提高独立证据比例；任务因 worker 自报完成但未通过团队 completion predicate，不应计入经验证成功。
